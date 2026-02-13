@@ -1,0 +1,1809 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BE-TPP Phase 3 — API Test Console</title>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Noto+Sans+Thai:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0c0e14;
+            --surface: #13151e;
+            --surface-2: #1a1d2b;
+            --border: #262a3a;
+            --border-active: #3d4260;
+            --text: #e2e4ed;
+            --text-dim: #7a7f96;
+            --accent: #22d3ee;
+            --accent-dim: rgba(34, 211, 238, 0.12);
+            --green: #34d399;
+            --green-dim: rgba(52, 211, 153, 0.12);
+            --red: #f87171;
+            --red-dim: rgba(248, 113, 113, 0.12);
+            --amber: #fbbf24;
+            --amber-dim: rgba(251, 191, 36, 0.12);
+            --purple: #a78bfa;
+            --radius: 10px;
+            --mono: 'JetBrains Mono', monospace;
+            --sans: 'Noto Sans Thai', sans-serif;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: var(--sans);
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+
+        /* ===== Header ===== */
+        .header {
+            border-bottom: 1px solid var(--border);
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            background: rgba(12, 14, 20, 0.9);
+            backdrop-filter: blur(12px);
+            z-index: 100;
+        }
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .logo {
+            width: 32px; height: 32px;
+            background: linear-gradient(135deg, var(--accent), #6366f1);
+            border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 700; font-size: 14px; color: #000;
+        }
+        .header h1 {
+            font-size: 16px;
+            font-weight: 600;
+            letter-spacing: -0.02em;
+        }
+        .header h1 span { color: var(--text-dim); font-weight: 400; }
+        .user-badge {
+            font-family: var(--mono);
+            font-size: 12px;
+            padding: 5px 10px;
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-dim);
+            display: flex; align-items: center; gap: 6px;
+        }
+        .user-badge .dot {
+            width: 7px; height: 7px;
+            border-radius: 50%;
+            background: var(--red);
+        }
+        .user-badge .dot.online { background: var(--green); }
+
+        /* ===== Layout ===== */
+        .container {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+
+        /* ===== Auth Section ===== */
+        .auth-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 28px;
+            margin-bottom: 24px;
+        }
+        .auth-card.logged-in {
+            border-color: var(--green);
+            background: linear-gradient(135deg, var(--green-dim), transparent);
+        }
+        .section-tag {
+            font-family: var(--mono);
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            padding: 3px 8px;
+            border-radius: 4px;
+            display: inline-block;
+            margin-bottom: 12px;
+        }
+        .tag-auth { background: var(--accent-dim); color: var(--accent); }
+        .tag-api { background: var(--purple); color: #000; font-weight: 600; }
+        .tag-mqtt { background: var(--amber-dim); color: var(--amber); }
+        .tag-device { background: var(--green-dim); color: var(--green); }
+        .tag-profile { background: var(--accent-dim); color: var(--accent); }
+
+        .auth-form {
+            display: flex;
+            gap: 10px;
+            margin-top: 16px;
+        }
+        .auth-form input {
+            flex: 1;
+            font-family: var(--mono);
+            font-size: 14px;
+            padding: 10px 14px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .auth-form input:focus {
+            border-color: var(--accent);
+        }
+        .auth-form input::placeholder { color: var(--text-dim); }
+
+        /* ===== Buttons ===== */
+        .btn {
+            font-family: var(--sans);
+            font-size: 13px;
+            font-weight: 600;
+            padding: 10px 18px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.15s;
+            white-space: nowrap;
+        }
+        .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .btn-primary {
+            background: var(--accent);
+            color: #000;
+        }
+        .btn-primary:hover:not(:disabled) { filter: brightness(1.15); }
+        .btn-danger {
+            background: var(--red-dim);
+            color: var(--red);
+            border: 1px solid rgba(248,113,113,0.2);
+        }
+        .btn-danger:hover:not(:disabled) { background: rgba(248,113,113,0.2); }
+        .btn-ghost {
+            background: var(--surface-2);
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+        .btn-ghost:hover:not(:disabled) { border-color: var(--border-active); }
+        .btn-sm { padding: 7px 12px; font-size: 12px; }
+        .btn-green {
+            background: var(--green-dim);
+            color: var(--green);
+            border: 1px solid rgba(52,211,153,0.2);
+        }
+        .btn-green:hover:not(:disabled) { background: rgba(52,211,153,0.2); }
+
+        /* ===== API Test Cards ===== */
+        .api-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        .api-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            overflow: hidden;
+            transition: border-color 0.2s;
+        }
+        .api-card:hover { border-color: var(--border-active); }
+        .api-card-header {
+            padding: 16px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--border);
+        }
+        .api-card-header h3 {
+            font-family: var(--mono);
+            font-size: 14px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .method-badge {
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: 600;
+            letter-spacing: 0.04em;
+        }
+        .method-rpc { background: var(--green-dim); color: var(--green); }
+        .method-edge { background: var(--amber-dim); color: var(--amber); }
+
+        .api-card-body {
+            padding: 16px 20px;
+        }
+        .api-card-body p {
+            font-size: 13px;
+            color: var(--text-dim);
+            margin-bottom: 12px;
+        }
+        .param-row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+            align-items: center;
+        }
+        .param-label {
+            font-family: var(--mono);
+            font-size: 12px;
+            color: var(--text-dim);
+            min-width: 80px;
+        }
+        .param-input {
+            font-family: var(--mono);
+            font-size: 13px;
+            padding: 7px 12px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text);
+            flex: 1;
+            outline: none;
+        }
+        .param-input:focus { border-color: var(--accent); }
+        select.param-input {
+            appearance: none;
+            cursor: pointer;
+        }
+
+        .api-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 14px;
+        }
+
+        /* ===== Output Console ===== */
+        .output-panel {
+            margin-top: 12px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .output-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 12px;
+            border-bottom: 1px solid var(--border);
+            font-family: var(--mono);
+            font-size: 11px;
+            color: var(--text-dim);
+        }
+        .output-status {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .status-dot {
+            width: 6px; height: 6px;
+            border-radius: 50%;
+        }
+        .status-dot.ok { background: var(--green); }
+        .status-dot.err { background: var(--red); }
+        .status-dot.loading {
+            background: var(--amber);
+            animation: pulse 1s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        .output-body {
+            padding: 12px;
+            font-family: var(--mono);
+            font-size: 12px;
+            line-height: 1.7;
+            max-height: 300px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+            color: var(--text-dim);
+        }
+        .output-body::-webkit-scrollbar { width: 6px; }
+        .output-body::-webkit-scrollbar-track { background: transparent; }
+        .output-body::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 3px;
+        }
+
+        /* ===== Device Picker ===== */
+        .device-bar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 20px;
+            padding: 14px 18px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+        }
+        .device-bar label {
+            font-size: 13px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .device-select {
+            flex: 1;
+            font-family: var(--mono);
+            font-size: 13px;
+            padding: 8px 12px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text);
+            cursor: pointer;
+            outline: none;
+        }
+
+        /* ===== Device Management Section ===== */
+        .dm-section {
+            margin-top: 32px;
+        }
+        .dm-section-title {
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* Device Table */
+        .device-table-wrap {
+            overflow-x: auto;
+        }
+        .device-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        .device-table th {
+            font-family: var(--mono);
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--text-dim);
+            padding: 10px 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+            white-space: nowrap;
+        }
+        .device-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border);
+            color: var(--text);
+            vertical-align: middle;
+        }
+        .device-table tr:last-child td {
+            border-bottom: none;
+        }
+        .device-table tr:hover td {
+            background: var(--surface-2);
+        }
+        .device-table .mono {
+            font-family: var(--mono);
+            font-size: 12px;
+        }
+        .badge-public {
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+        .badge-public.yes { background: var(--green-dim); color: var(--green); }
+        .badge-public.no { background: var(--surface-2); color: var(--text-dim); }
+        .td-actions {
+            display: flex;
+            gap: 6px;
+        }
+
+        /* Add Device Form */
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .form-group.full-width {
+            grid-column: 1 / -1;
+        }
+        .form-group label {
+            font-family: var(--mono);
+            font-size: 11px;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        .form-group input,
+        .form-group select {
+            font-family: var(--mono);
+            font-size: 13px;
+            padding: 8px 12px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text);
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .form-group input:focus,
+        .form-group select:focus {
+            border-color: var(--accent);
+        }
+        .form-group input::placeholder { color: var(--text-dim); }
+        .form-group .hint {
+            font-size: 11px;
+            color: var(--text-dim);
+            margin-top: 2px;
+        }
+
+        .checkbox-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding-top: 18px;
+        }
+        .checkbox-row input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            accent-color: var(--accent);
+            cursor: pointer;
+        }
+        .checkbox-row label {
+            font-size: 13px;
+            cursor: pointer;
+            color: var(--text);
+            text-transform: none;
+            letter-spacing: 0;
+        }
+
+        /* ===== Modal ===== */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(4px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 200;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+        }
+        .modal-overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .modal {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 28px;
+            width: 90%;
+            max-width: 520px;
+            max-height: 90vh;
+            overflow-y: auto;
+            transform: translateY(10px);
+            transition: transform 0.2s;
+        }
+        .modal-overlay.active .modal {
+            transform: translateY(0);
+        }
+        .modal-title {
+            font-size: 16px;
+            font-weight: 700;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .modal-actions {
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+            margin-top: 20px;
+        }
+
+        /* Confirm Dialog */
+        .confirm-text {
+            font-size: 14px;
+            line-height: 1.7;
+            color: var(--text-dim);
+            margin-bottom: 8px;
+        }
+        .confirm-device-id {
+            font-family: var(--mono);
+            font-size: 14px;
+            color: var(--red);
+            font-weight: 600;
+            padding: 8px 12px;
+            background: var(--red-dim);
+            border-radius: 6px;
+            display: inline-block;
+            margin: 8px 0;
+        }
+
+        /* ===== Profile Info Rows ===== */
+        .profile-info {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0;
+        }
+        .profile-row {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border);
+        }
+        .profile-row:nth-last-child(-n+2) {
+            border-bottom: none;
+        }
+        .profile-row.full-width {
+            grid-column: 1 / -1;
+        }
+        .profile-label {
+            font-family: var(--mono);
+            font-size: 11px;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        .profile-value {
+            font-size: 14px;
+            color: var(--text);
+        }
+        .profile-value.empty {
+            color: var(--text-dim);
+            font-style: italic;
+            font-size: 13px;
+        }
+        @media (max-width: 640px) {
+            .profile-info { grid-template-columns: 1fr; }
+            .profile-row:nth-last-child(-n+2) { border-bottom: 1px solid var(--border); }
+            .profile-row:last-child { border-bottom: none; }
+        }
+
+        /* ===== Toast Notification ===== */
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            z-index: 300;
+            transform: translateY(20px);
+            opacity: 0;
+            transition: all 0.3s;
+            pointer-events: none;
+        }
+        .toast.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+        .toast.success {
+            background: var(--green);
+            color: #000;
+        }
+        .toast.error {
+            background: var(--red);
+            color: #fff;
+        }
+
+        /* ===== Utilities ===== */
+        .hidden { display: none !important; }
+        .mt-4 { margin-top: 16px; }
+        .text-sm { font-size: 13px; }
+        .text-dim { color: var(--text-dim); }
+        .text-green { color: var(--green); }
+        .text-red { color: var(--red); }
+        .divider {
+            height: 1px;
+            background: var(--border);
+            margin: 24px 0;
+        }
+
+        /* ===== Responsive ===== */
+        @media (max-width: 640px) {
+            .container { padding: 16px; }
+            .auth-form { flex-direction: column; }
+            .param-row { flex-direction: column; align-items: stretch; }
+            .param-label { min-width: auto; }
+            .form-grid { grid-template-columns: 1fr; }
+            .checkbox-row { padding-top: 0; }
+            .device-bar { flex-direction: column; align-items: stretch; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- ===== Header ===== -->
+<div class="header">
+    <div class="header-left">
+        <div class="logo">BE</div>
+        <h1>Phase 3 <span>API Test Console</span></h1>
+    </div>
+    <div class="user-badge" id="userBadge">
+        <div class="dot" id="statusDot"></div>
+        <span id="userEmail">Not logged in</span>
+    </div>
+</div>
+
+<div class="container">
+
+    <!-- ===== Section 1: Authentication ===== -->
+    <div class="auth-card" id="authCard">
+        <span class="section-tag tag-auth">&#9312; Authentication</span>
+        <h2 style="font-size:18px; margin-bottom:4px;">Supabase Magic Link</h2>
+        <p class="text-sm text-dim">Login ด้วย email เพื่อรับ session token สำหรับเรียก API</p>
+
+        <!-- Login Form -->
+        <div id="loginView">
+            <!-- Method 1: Magic Link -->
+            <p class="text-sm" style="color:var(--accent); font-weight:600; margin-bottom:6px;">วิธีที่ 1: Magic Link</p>
+            <div class="auth-form">
+                <input type="email" id="emailInput" placeholder="your@email.com" />
+                <button class="btn btn-primary" id="btnSendMagicLink" onclick="sendMagicLink()">
+                    Send Magic Link
+                </button>
+            </div>
+            <p id="authMsg" class="text-sm mt-4" style="display:none;"></p>
+
+            <!-- Divider -->
+            <div style="display:flex; align-items:center; gap:12px; margin:20px 0;">
+                <div style="flex:1; height:1px; background:var(--border);"></div>
+                <span class="text-sm text-dim">หรือ</span>
+                <div style="flex:1; height:1px; background:var(--border);"></div>
+            </div>
+
+            <!-- Method 2: Paste Token -->
+            <p class="text-sm" style="color:var(--amber); font-weight:600; margin-bottom:6px;">วิธีที่ 2: Paste Token (สำหรับ local file)</p>
+            <p class="text-sm text-dim" style="margin-bottom:8px;">
+                หลังคลิก Magic Link &#8594; copy <code style="color:var(--accent);">access_token=...</code> จาก URL ที่ redirect &#8594; วางด้านล่าง
+            </p>
+            <div class="auth-form">
+                <input type="text" id="tokenInput" placeholder="วาง access_token ที่นี่ (eyJhb...)" style="font-size:12px;" />
+                <button class="btn btn-ghost" onclick="loginWithToken()">
+                    Login with Token
+                </button>
+            </div>
+            <p id="tokenMsg" class="text-sm mt-4" style="display:none;"></p>
+        </div>
+
+        <!-- Logged In View -->
+        <div id="loggedInView" class="hidden">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-top:12px;">
+                <div>
+                    <p class="text-sm text-green">&#10004; Authenticated</p>
+                    <p class="text-sm text-dim" id="sessionInfo" style="font-family:var(--mono); margin-top:4px;"></p>
+                </div>
+                <div style="display:flex; gap:8px;">
+                    <button class="btn btn-ghost btn-sm" onclick="loadDevices()">&#8635; Refresh Devices</button>
+                    <button class="btn btn-danger btn-sm" onclick="logout()">Logout</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== Device Picker (shown after login) ===== -->
+    <div class="device-bar hidden" id="deviceBar">
+        <label>&#128225; Active Device:</label>
+        <select class="device-select" id="deviceSelect" onchange="onDeviceChange()">
+            <option value="">Loading devices...</option>
+        </select>
+        <button class="btn btn-ghost btn-sm" onclick="loadDevices()">&#8635;</button>
+    </div>
+
+    <!-- ===== API Test Cards (shown after login) ===== -->
+    <div class="api-grid hidden" id="apiSection">
+
+        <!-- Card 1: get_latest_readings -->
+        <div class="api-card">
+            <div class="api-card-header">
+                <h3>
+                    <span class="method-badge method-rpc">RPC</span>
+                    get_latest_readings
+                </h3>
+                <button class="btn btn-primary btn-sm" onclick="testLatestReadings()" id="btnLatest">
+                    &#9654; Run
+                </button>
+            </div>
+            <div class="api-card-body">
+                <p>ดึงข้อมูล sensor ล่าสุดของ device ที่เลือก พร้อม age_seconds</p>
+                <div id="outputLatest"></div>
+            </div>
+        </div>
+
+        <!-- Card 2: get_readings_range -->
+        <div class="api-card">
+            <div class="api-card-header">
+                <h3>
+                    <span class="method-badge method-rpc">RPC</span>
+                    get_readings_range
+                </h3>
+                <button class="btn btn-primary btn-sm" onclick="testReadingsRange()" id="btnRange">
+                    &#9654; Run
+                </button>
+            </div>
+            <div class="api-card-body">
+                <p>ดึงข้อมูล sensor ในช่วงเวลา (สูงสุด 7 วัน, 2000 rows)</p>
+                <div class="param-row">
+                    <span class="param-label">hours_ago</span>
+                    <select class="param-input" id="rangeHours">
+                        <option value="1">1 ชั่วโมง</option>
+                        <option value="6">6 ชั่วโมง</option>
+                        <option value="24" selected>24 ชั่วโมง (1 วัน)</option>
+                        <option value="72">72 ชั่วโมง (3 วัน)</option>
+                        <option value="168">168 ชั่วโมง (7 วัน)</option>
+                    </select>
+                </div>
+                <div id="outputRange"></div>
+            </div>
+        </div>
+
+        <!-- Card 3: get_device_status -->
+        <div class="api-card">
+            <div class="api-card-header">
+                <h3>
+                    <span class="method-badge method-rpc">RPC</span>
+                    get_device_status
+                </h3>
+                <button class="btn btn-primary btn-sm" onclick="testDeviceStatus()" id="btnStatus">
+                    &#9654; Run
+                </button>
+            </div>
+            <div class="api-card-body">
+                <p>ดึงสถานะล่าสุดของ device (fan, firmware, network, online/offline)</p>
+                <div id="outputStatus"></div>
+            </div>
+        </div>
+
+        <!-- Card 4: fan_control Edge Function -->
+        <div class="api-card">
+            <div class="api-card-header">
+                <h3>
+                    <span class="method-badge method-edge">EDGE</span>
+                    fan_control
+                </h3>
+                <button class="btn btn-primary btn-sm" onclick="testFanControl()" id="btnFanControl">
+                    &#9654; Send
+                </button>
+            </div>
+            <div class="api-card-body">
+                <p>สั่งควบคุมพัดลมผ่าน Edge Function &#8594; EMQX MQTT</p>
+                <div class="param-row">
+                    <span class="param-label">command</span>
+                    <select class="param-input" id="fanCommand" onchange="onFanCommandChange()">
+                        <option value="mode">mode (เปลี่ยนโหมด)</option>
+                        <option value="speed">speed (ปรับความเร็ว)</option>
+                    </select>
+                </div>
+                <div class="param-row" id="modeValueRow">
+                    <span class="param-label">value</span>
+                    <select class="param-input" id="fanModeValue">
+                        <option value="automatic">automatic</option>
+                        <option value="custom">custom</option>
+                    </select>
+                </div>
+                <div class="param-row hidden" id="speedValueRow">
+                    <span class="param-label">value</span>
+                    <input type="range" min="0" max="100" value="60" class="param-input"
+                           id="fanSpeedValue" oninput="updateSpeedLabel()"
+                           style="padding:4px 8px;" />
+                    <span id="speedLabel" style="font-family:var(--mono); font-size:13px; min-width:40px;">60%</span>
+                </div>
+                <div id="outputFan"></div>
+            </div>
+        </div>
+
+        <!-- Card 5: get_my_devices -->
+        <div class="api-card">
+            <div class="api-card-header">
+                <h3>
+                    <span class="method-badge method-rpc">RPC</span>
+                    get_my_devices
+                </h3>
+                <button class="btn btn-primary btn-sm" onclick="testMyDevices()">
+                    &#9654; Run
+                </button>
+            </div>
+            <div class="api-card-body">
+                <p>ดึงรายการ devices ทั้งหมดของ user (สร้างไว้แล้วใน Phase 2A)</p>
+                <div id="outputDevices"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== Section: Profile Management (shown after login) ===== -->
+    <div class="hidden" id="profileSection">
+        <div class="divider"></div>
+
+        <div class="dm-section">
+            <div class="dm-section-title">
+                <span class="section-tag tag-profile">&#9313; Profile Management</span>
+            </div>
+
+            <div class="api-card">
+                <div class="api-card-header">
+                    <h3>&#128100; ข้อมูลส่วนตัว</h3>
+                    <div style="display:flex; gap:8px;">
+                        <button class="btn btn-ghost btn-sm" onclick="toggleProfileEdit(false)" id="btnCancelProfile" style="display:none;">ยกเลิก</button>
+                        <button class="btn btn-ghost btn-sm" onclick="toggleProfileEdit(true)" id="btnEditProfile">&#9998; แก้ไข</button>
+                    </div>
+                </div>
+                <div class="api-card-body">
+                    <!-- View Mode -->
+                    <div id="profileView">
+                        <div id="profileViewContent">
+                            <p style="text-align:center;" class="text-dim">กำลังโหลด...</p>
+                        </div>
+                    </div>
+
+                    <!-- Edit Mode -->
+                    <div id="profileEdit" class="hidden">
+                        <div class="form-grid">
+                            <div class="form-group full-width">
+                                <label>Email (ไม่สามารถแก้ไขได้)</label>
+                                <input type="text" id="profileEmail" disabled style="opacity:0.5;" />
+                            </div>
+                            <div class="form-group">
+                                <label>Display Name</label>
+                                <input type="text" id="profileDisplayName" placeholder="ชื่อที่ต้องการแสดง" maxlength="50" />
+                            </div>
+                            <div class="form-group">
+                                <label>Phone</label>
+                                <input type="tel" id="profilePhone" placeholder="เช่น 081-234-5678" maxlength="20" />
+                            </div>
+                            <div class="form-group full-width">
+                                <label>Address</label>
+                                <input type="text" id="profileAddress" placeholder="ที่อยู่" maxlength="200" />
+                            </div>
+                        </div>
+                        <div class="api-actions">
+                            <button class="btn btn-primary" onclick="saveProfile()" id="btnSaveProfile">&#128190; บันทึก</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== Section: Device Management (shown after login) ===== -->
+    <div class="hidden" id="deviceMgmtSection">
+        <div class="divider"></div>
+
+        <div class="dm-section">
+            <div class="dm-section-title">
+                <span class="section-tag tag-device">&#9314; Device Management</span>
+            </div>
+
+            <!-- Add Device Card -->
+            <div class="api-card" style="margin-bottom:16px;">
+                <div class="api-card-header">
+                    <h3>&#10133; เพิ่ม Device ใหม่</h3>
+                </div>
+                <div class="api-card-body">
+                    <p>ลงทะเบียน device ใหม่ผ่าน register_device() &#8212; กรอก Device ID (Serial) ที่พิมพ์อยู่บนตัวเครื่อง</p>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>Device ID (Serial) *</label>
+                            <input type="text" id="addDeviceId" placeholder="เช่น 582D34712B45" maxlength="20" />
+                        </div>
+                        <div class="form-group">
+                            <label>Device Name</label>
+                            <input type="text" id="addDeviceName" placeholder="เช่น ห้องนอน, สำนักงาน" maxlength="50" />
+                        </div>
+                        <div class="form-group">
+                            <label>Latitude</label>
+                            <input type="number" id="addLat" placeholder="เช่น 17.4138" step="any" />
+                        </div>
+                        <div class="form-group">
+                            <label>Longitude</label>
+                            <input type="number" id="addLng" placeholder="เช่น 102.7874" step="any" />
+                        </div>
+                        <div class="checkbox-row">
+                            <input type="checkbox" id="addIsPublic" />
+                            <label for="addIsPublic">แสดงบน Air Quality Map (สาธารณะ)</label>
+                        </div>
+                    </div>
+                    <div class="api-actions">
+                        <button class="btn btn-green" onclick="addDevice()" id="btnAddDevice">
+                            &#10133; Register Device
+                        </button>
+                    </div>
+                    <div id="outputAddDevice"></div>
+                </div>
+            </div>
+
+            <!-- Device List Card -->
+            <div class="api-card">
+                <div class="api-card-header">
+                    <h3>&#128203; Devices ของฉัน</h3>
+                    <button class="btn btn-ghost btn-sm" onclick="loadDeviceList()">&#8635; Refresh</button>
+                </div>
+                <div class="api-card-body" style="padding:0;">
+                    <div id="deviceListContainer">
+                        <p style="padding:20px; text-align:center;" class="text-dim">กำลังโหลด...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div><!-- end container -->
+
+<!-- ===== Edit Device Modal ===== -->
+<div class="modal-overlay" id="editModal">
+    <div class="modal">
+        <div class="modal-title">&#9998; แก้ไข Device</div>
+        <div class="form-grid">
+            <div class="form-group full-width">
+                <label>Device ID (ไม่สามารถแก้ไขได้)</label>
+                <input type="text" id="editDeviceId" disabled style="opacity:0.5;" />
+            </div>
+            <div class="form-group full-width">
+                <label>Device Name</label>
+                <input type="text" id="editDeviceName" placeholder="ชื่อ device" maxlength="50" />
+            </div>
+            <div class="form-group full-width">
+                <label>Client ID (ESP32 MAC)</label>
+                <input type="text" id="editClientId" placeholder="เช่น be-tpp-cca7f7f924f0" maxlength="30" />
+            </div>
+            <div class="form-group">
+                <label>Latitude</label>
+                <input type="number" id="editLat" placeholder="17.4138" step="any" />
+            </div>
+            <div class="form-group">
+                <label>Longitude</label>
+                <input type="number" id="editLng" placeholder="102.7874" step="any" />
+            </div>
+            <div class="checkbox-row">
+                <input type="checkbox" id="editIsPublic" />
+                <label for="editIsPublic">แสดงบน Air Quality Map (สาธารณะ)</label>
+            </div>
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-ghost" onclick="closeEditModal()">ยกเลิก</button>
+            <button class="btn btn-primary" onclick="saveDevice()" id="btnSaveDevice">บันทึก</button>
+        </div>
+    </div>
+</div>
+
+<!-- ===== Delete Confirmation Modal ===== -->
+<div class="modal-overlay" id="deleteModal">
+    <div class="modal">
+        <div class="modal-title" style="color:var(--red);">&#9888; ลบ Device</div>
+        <p class="confirm-text">คุณต้องการลบ device นี้หรือไม่?</p>
+        <div class="confirm-device-id" id="deleteDeviceIdDisplay"></div>
+        <p class="confirm-text">การลบจะยกเลิกการลงทะเบียน device ออกจากบัญชีของคุณ ข้อมูล sensor ที่บันทึกไว้จะยังคงอยู่</p>
+        <div class="modal-actions">
+            <button class="btn btn-ghost" onclick="closeDeleteModal()">ยกเลิก</button>
+            <button class="btn btn-danger" onclick="confirmDelete()" id="btnConfirmDelete">&#128465; ลบ Device</button>
+        </div>
+    </div>
+</div>
+
+<!-- ===== Toast ===== -->
+<div class="toast" id="toast"></div>
+
+<!-- ===== Supabase Client ===== -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+
+<script>
+// ============================================================
+// Configuration
+// ============================================================
+const SUPABASE_URL = 'https://brgzimwzcfbwkgymqzvy.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJyZ3ppbXd6Y2Zid2tneW1xenZ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgwMzgzMDMsImV4cCI6MjA4MzYxNDMwM30.kSZCG67OlQVR_2ECFpA7uqi4TeQ1osIlngOJJ6OI5dM';
+
+// Initialize Supabase client
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// State
+let currentUser = null;
+let currentDeviceId = '';
+let deleteTargetDeviceId = '';
+
+// ============================================================
+// Helper: sanitizeHTML — ป้องกัน XSS ทุกจุดที่ render innerHTML
+// ============================================================
+function sanitizeHTML(str) {
+    const temp = document.createElement('div');
+    temp.textContent = str;
+    return temp.innerHTML;
+}
+
+// ============================================================
+// Helper: Create output panel
+// ============================================================
+function createOutput(containerId, status, statusText, time, body) {
+    const container = document.getElementById(containerId);
+    const dotClass = status === 'ok' ? 'ok' : status === 'loading' ? 'loading' : 'err';
+    const bodyColor = status === 'err' ? 'var(--red)' : 'var(--text-dim)';
+    const safeStatus = sanitizeHTML(statusText);
+    const safeTime = sanitizeHTML(time);
+    const safeBody = sanitizeHTML(typeof body === 'string' ? body : JSON.stringify(body, null, 2));
+
+    container.innerHTML =
+        '<div class="output-panel">' +
+            '<div class="output-bar">' +
+                '<div class="output-status">' +
+                    '<div class="status-dot ' + dotClass + '"></div>' +
+                    '<span>' + safeStatus + '</span>' +
+                '</div>' +
+                '<span>' + safeTime + '</span>' +
+            '</div>' +
+            '<div class="output-body" style="color:' + bodyColor + '">' + safeBody + '</div>' +
+        '</div>';
+}
+
+function showLoading(containerId) {
+    createOutput(containerId, 'loading', 'Executing...', '', 'Waiting for response...');
+}
+
+function formatTime(ms) {
+    return ms + 'ms';
+}
+
+// ============================================================
+// Helper: Toast notification
+// ============================================================
+function showToast(message, type) {
+    const toast = document.getElementById('toast');
+    toast.textContent = message;
+    toast.className = 'toast ' + type + ' show';
+    setTimeout(function() {
+        toast.classList.remove('show');
+    }, 3000);
+}
+
+// ============================================================
+// Auth: Check existing session on page load
+// ============================================================
+async function checkSession() {
+    const { data: { session } } = await sb.auth.getSession();
+    if (session) {
+        onLogin(session);
+    }
+
+    // Handle magic link callback (token in URL hash)
+    const hash = window.location.hash;
+    if (hash && hash.includes('access_token')) {
+        const { data: { session: newSession }, error } = await sb.auth.getSession();
+        if (newSession) {
+            onLogin(newSession);
+            // ลบ token จาก URL
+            window.history.replaceState(null, '', window.location.pathname);
+        }
+    }
+
+    // Listen for auth changes
+    sb.auth.onAuthStateChange(function(event, session) {
+        if (event === 'SIGNED_IN' && session) {
+            onLogin(session);
+        } else if (event === 'SIGNED_OUT') {
+            onLogout();
+        }
+    });
+}
+
+// ============================================================
+// Auth: Send Magic Link
+// ============================================================
+async function sendMagicLink() {
+    const email = document.getElementById('emailInput').value.trim();
+    if (!email) {
+        showAuthMsg('กรุณากรอก email', 'red');
+        return;
+    }
+
+    const btn = document.getElementById('btnSendMagicLink');
+    btn.disabled = true;
+    btn.textContent = 'Sending...';
+
+    const { error } = await sb.auth.signInWithOtp({
+        email: email,
+        options: {
+            emailRedirectTo: window.location.origin + window.location.pathname,
+        }
+    });
+
+    if (error) {
+        showAuthMsg('Error: ' + error.message, 'red');
+    } else {
+        showAuthMsg('Magic Link ส่งไปที่ ' + email + ' แล้ว — ตรวจสอบ inbox', 'green');
+    }
+
+    btn.disabled = false;
+    btn.textContent = 'Send Magic Link';
+}
+
+function showAuthMsg(msg, color) {
+    const el = document.getElementById('authMsg');
+    el.style.display = 'block';
+    el.style.color = color === 'green' ? 'var(--green)' : 'var(--red)';
+    el.textContent = msg;
+}
+
+// ============================================================
+// Auth: Login with Paste Token (สำหรับใช้งาน local file://)
+// ============================================================
+async function loginWithToken() {
+    const msgEl = document.getElementById('tokenMsg');
+    let raw = document.getElementById('tokenInput').value.trim();
+
+    if (!raw) {
+        msgEl.style.display = 'block';
+        msgEl.style.color = 'var(--red)';
+        msgEl.textContent = 'กรุณาวาง access_token';
+        return;
+    }
+
+    // Extract access_token จาก full URL หรือ hash fragment
+    if (raw.includes('access_token=')) {
+        const match = raw.match(/access_token=([^&]+)/);
+        if (match) raw = match[1];
+    }
+
+    // Extract refresh_token ถ้ามี
+    let refreshToken = '';
+    const inputFull = document.getElementById('tokenInput').value.trim();
+    if (inputFull.includes('refresh_token=')) {
+        const match = inputFull.match(/refresh_token=([^&]+)/);
+        if (match) refreshToken = match[1];
+    }
+
+    msgEl.style.display = 'block';
+    msgEl.style.color = 'var(--amber)';
+    msgEl.textContent = 'Verifying token...';
+
+    try {
+        const { data, error } = await sb.auth.setSession({
+            access_token: raw,
+            refresh_token: refreshToken || raw,
+        });
+
+        if (error) {
+            msgEl.style.color = 'var(--red)';
+            msgEl.textContent = 'Error: ' + error.message;
+            return;
+        }
+
+        if (data.session) {
+            msgEl.style.color = 'var(--green)';
+            msgEl.textContent = 'Login สำเร็จ!';
+            onLogin(data.session);
+        } else {
+            msgEl.style.color = 'var(--red)';
+            msgEl.textContent = 'Token ไม่ถูกต้องหรือหมดอายุ';
+        }
+    } catch (e) {
+        msgEl.style.color = 'var(--red)';
+        msgEl.textContent = 'Error: ' + e.message;
+    }
+}
+
+// ============================================================
+// Auth: Login/Logout handlers
+// ============================================================
+function onLogin(session) {
+    currentUser = session.user;
+    document.getElementById('loginView').classList.add('hidden');
+    document.getElementById('loggedInView').classList.remove('hidden');
+    document.getElementById('authCard').classList.add('logged-in');
+    document.getElementById('userEmail').textContent = currentUser.email;
+    document.getElementById('statusDot').classList.add('online');
+    document.getElementById('sessionInfo').textContent =
+        'uid: ' + currentUser.id.substring(0, 8) + '... | exp: ' + new Date(session.expires_at * 1000).toLocaleTimeString();
+    document.getElementById('deviceBar').classList.remove('hidden');
+    document.getElementById('apiSection').classList.remove('hidden');
+    document.getElementById('deviceMgmtSection').classList.remove('hidden');
+    document.getElementById('profileSection').classList.remove('hidden');
+
+    loadDevices();
+    loadDeviceList();
+    loadProfile();
+}
+
+function onLogout() {
+    currentUser = null;
+    currentDeviceId = '';
+    document.getElementById('loginView').classList.remove('hidden');
+    document.getElementById('loggedInView').classList.add('hidden');
+    document.getElementById('authCard').classList.remove('logged-in');
+    document.getElementById('userEmail').textContent = 'Not logged in';
+    document.getElementById('statusDot').classList.remove('online');
+    document.getElementById('deviceBar').classList.add('hidden');
+    document.getElementById('apiSection').classList.add('hidden');
+    document.getElementById('deviceMgmtSection').classList.add('hidden');
+    document.getElementById('profileSection').classList.add('hidden');
+}
+
+async function logout() {
+    await sb.auth.signOut();
+    onLogout();
+}
+
+// ============================================================
+// Devices: Load dropdown (สำหรับ API Test)
+// ============================================================
+async function loadDevices() {
+    const select = document.getElementById('deviceSelect');
+    select.innerHTML = '<option value="">Loading...</option>';
+
+    const { data, error } = await sb.rpc('get_my_devices');
+
+    if (error) {
+        select.innerHTML = '<option value="">Error: ' + sanitizeHTML(error.message) + '</option>';
+        return;
+    }
+
+    if (!data || data.length === 0) {
+        select.innerHTML = '<option value="">No devices registered</option>';
+        return;
+    }
+
+    select.innerHTML = data.map(function(d) {
+        var name = sanitizeHTML(d.device_name || d.device_id);
+        var id = sanitizeHTML(d.device_id);
+        return '<option value="' + id + '">' + name + ' (' + id + ')</option>';
+    }).join('');
+
+    currentDeviceId = data[0].device_id;
+}
+
+function onDeviceChange() {
+    currentDeviceId = document.getElementById('deviceSelect').value;
+}
+
+// ============================================================
+// Test 1: get_latest_readings
+// ============================================================
+async function testLatestReadings() {
+    if (!currentDeviceId) { alert('เลือก device ก่อน'); return; }
+    showLoading('outputLatest');
+    const start = performance.now();
+
+    const { data, error } = await sb.rpc('get_latest_readings', {
+        p_device_id: currentDeviceId
+    });
+
+    const elapsed = Math.round(performance.now() - start);
+
+    if (error) {
+        createOutput('outputLatest', 'err', 'Error: ' + error.code, formatTime(elapsed), error.message);
+        return;
+    }
+
+    if (!data || data.length === 0) {
+        createOutput('outputLatest', 'err', 'No data', formatTime(elapsed), 'No readings found for this device');
+        return;
+    }
+
+    createOutput('outputLatest', 'ok', '200 OK \u2014 1 row', formatTime(elapsed), data);
+}
+
+// ============================================================
+// Test 2: get_readings_range
+// ============================================================
+async function testReadingsRange() {
+    if (!currentDeviceId) { alert('เลือก device ก่อน'); return; }
+    showLoading('outputRange');
+    const start = performance.now();
+
+    const hours = parseInt(document.getElementById('rangeHours').value);
+    const now = new Date();
+    const past = new Date(now.getTime() - hours * 60 * 60 * 1000);
+
+    const { data, error } = await sb.rpc('get_readings_range', {
+        p_device_id: currentDeviceId,
+        p_start: past.toISOString(),
+        p_end: now.toISOString()
+    });
+
+    const elapsed = Math.round(performance.now() - start);
+
+    if (error) {
+        createOutput('outputRange', 'err', 'Error: ' + error.code, formatTime(elapsed), error.message);
+        return;
+    }
+
+    const summary = {
+        total_rows: data.length,
+        time_range: past.toLocaleString() + ' \u2192 ' + now.toLocaleString(),
+        first_reading: data.length > 0 ? data[0] : null,
+        last_reading: data.length > 0 ? data[data.length - 1] : null,
+    };
+
+    createOutput('outputRange', 'ok', '200 OK \u2014 ' + data.length + ' rows', formatTime(elapsed), summary);
+}
+
+// ============================================================
+// Test 3: get_device_status
+// ============================================================
+async function testDeviceStatus() {
+    if (!currentDeviceId) { alert('เลือก device ก่อน'); return; }
+    showLoading('outputStatus');
+    const start = performance.now();
+
+    const { data, error } = await sb.rpc('get_device_status', {
+        p_device_id: currentDeviceId
+    });
+
+    const elapsed = Math.round(performance.now() - start);
+
+    if (error) {
+        createOutput('outputStatus', 'err', 'Error: ' + error.code, formatTime(elapsed), error.message);
+        return;
+    }
+
+    if (!data || data.length === 0) {
+        createOutput('outputStatus', 'err', 'No data', formatTime(elapsed), 'No status found for this device');
+        return;
+    }
+
+    createOutput('outputStatus', 'ok', '200 OK \u2014 1 row', formatTime(elapsed), data);
+}
+
+// ============================================================
+// Test 4: fan_control (Edge Function)
+// ============================================================
+async function testFanControl() {
+    if (!currentDeviceId) { alert('เลือก device ก่อน'); return; }
+    showLoading('outputFan');
+    const start = performance.now();
+
+    const command = document.getElementById('fanCommand').value;
+    var value;
+    if (command === 'mode') {
+        value = document.getElementById('fanModeValue').value;
+    } else {
+        value = document.getElementById('fanSpeedValue').value;
+    }
+
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) {
+        createOutput('outputFan', 'err', 'Auth Error', '0ms', 'No active session');
+        return;
+    }
+
+    try {
+        const res = await fetch(SUPABASE_URL + '/functions/v1/fan-control', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + session.access_token,
+            },
+            body: JSON.stringify({ device_id: currentDeviceId, command: command, value: value }),
+        });
+
+        const elapsed = Math.round(performance.now() - start);
+        const body = await res.json();
+
+        if (res.ok) {
+            createOutput('outputFan', 'ok', res.status + ' OK', formatTime(elapsed), body);
+        } else {
+            createOutput('outputFan', 'err', res.status + ' Error', formatTime(elapsed), body);
+        }
+    } catch (err) {
+        const elapsed = Math.round(performance.now() - start);
+        createOutput('outputFan', 'err', 'Network Error', formatTime(elapsed),
+            'Edge Function ยังไม่ได้ deploy หรือ URL ไม่ถูกต้อง\n\n' + err.message);
+    }
+}
+
+// ============================================================
+// Test 5: get_my_devices
+// ============================================================
+async function testMyDevices() {
+    showLoading('outputDevices');
+    const start = performance.now();
+
+    const { data, error } = await sb.rpc('get_my_devices');
+
+    const elapsed = Math.round(performance.now() - start);
+
+    if (error) {
+        createOutput('outputDevices', 'err', 'Error: ' + error.code, formatTime(elapsed), error.message);
+        return;
+    }
+
+    createOutput('outputDevices', 'ok', '200 OK \u2014 ' + data.length + ' devices', formatTime(elapsed), data);
+}
+
+// ============================================================
+// UI Helpers (Fan Control)
+// ============================================================
+function onFanCommandChange() {
+    const cmd = document.getElementById('fanCommand').value;
+    document.getElementById('modeValueRow').classList.toggle('hidden', cmd !== 'mode');
+    document.getElementById('speedValueRow').classList.toggle('hidden', cmd !== 'speed');
+}
+
+function updateSpeedLabel() {
+    document.getElementById('speedLabel').textContent = document.getElementById('fanSpeedValue').value + '%';
+}
+
+// ============================================================
+// Profile Management: Load Profile
+// ============================================================
+async function loadProfile() {
+    var container = document.getElementById('profileViewContent');
+    container.innerHTML = '<p style="text-align:center;" class="text-dim">กำลังโหลด...</p>';
+
+    var { data, error } = await sb
+        .from('profiles')
+        .select('email, display_name, phone, address, created_at, updated_at')
+        .eq('id', currentUser.id)
+        .single();
+
+    if (error) {
+        container.innerHTML = '<p style="text-align:center; color:var(--red);">Error: ' + sanitizeHTML(error.message) + '</p>';
+        return;
+    }
+
+    if (!data) {
+        container.innerHTML = '<p style="text-align:center;" class="text-dim">ไม่พบข้อมูล profile</p>';
+        return;
+    }
+
+    renderProfileView(data);
+}
+
+function renderProfileView(data) {
+    var container = document.getElementById('profileViewContent');
+    var email = sanitizeHTML(data.email || currentUser.email || '-');
+    var displayName = data.display_name ? sanitizeHTML(data.display_name) : '<span class="empty">ยังไม่ได้ตั้ง</span>';
+    var phone = data.phone ? sanitizeHTML(data.phone) : '<span class="empty">ยังไม่ได้ตั้ง</span>';
+    var address = data.address ? sanitizeHTML(data.address) : '<span class="empty">ยังไม่ได้ตั้ง</span>';
+    var created = data.created_at ? new Date(data.created_at).toLocaleString('th-TH') : '-';
+    var updated = data.updated_at ? new Date(data.updated_at).toLocaleString('th-TH') : '-';
+
+    var html = '<div class="profile-info">';
+    html += '<div class="profile-row">';
+    html += '  <span class="profile-label">Email</span>';
+    html += '  <span class="profile-value">' + email + '</span>';
+    html += '</div>';
+    html += '<div class="profile-row">';
+    html += '  <span class="profile-label">Display Name</span>';
+    html += '  <span class="profile-value">' + displayName + '</span>';
+    html += '</div>';
+    html += '<div class="profile-row">';
+    html += '  <span class="profile-label">Phone</span>';
+    html += '  <span class="profile-value">' + phone + '</span>';
+    html += '</div>';
+    html += '<div class="profile-row">';
+    html += '  <span class="profile-label">Address</span>';
+    html += '  <span class="profile-value">' + address + '</span>';
+    html += '</div>';
+    html += '<div class="profile-row">';
+    html += '  <span class="profile-label">สมัครเมื่อ</span>';
+    html += '  <span class="profile-value" style="font-size:12px; font-family:var(--mono);">' + sanitizeHTML(created) + '</span>';
+    html += '</div>';
+    html += '<div class="profile-row">';
+    html += '  <span class="profile-label">อัพเดทล่าสุด</span>';
+    html += '  <span class="profile-value" style="font-size:12px; font-family:var(--mono);">' + sanitizeHTML(updated) + '</span>';
+    html += '</div>';
+    html += '</div>';
+
+    container.innerHTML = html;
+}
+
+// ============================================================
+// Profile Management: Toggle Edit Mode
+// ============================================================
+async function toggleProfileEdit(editing) {
+    if (editing) {
+        // โหลดข้อมูลปัจจุบันเข้า form
+        var { data } = await sb
+            .from('profiles')
+            .select('email, display_name, phone, address')
+            .eq('id', currentUser.id)
+            .single();
+
+        if (data) {
+            document.getElementById('profileEmail').value = data.email || currentUser.email || '';
+            document.getElementById('profileDisplayName').value = data.display_name || '';
+            document.getElementById('profilePhone').value = data.phone || '';
+            document.getElementById('profileAddress').value = data.address || '';
+        }
+
+        document.getElementById('profileView').classList.add('hidden');
+        document.getElementById('profileEdit').classList.remove('hidden');
+        document.getElementById('btnEditProfile').style.display = 'none';
+        document.getElementById('btnCancelProfile').style.display = 'inline-block';
+    } else {
+        document.getElementById('profileView').classList.remove('hidden');
+        document.getElementById('profileEdit').classList.add('hidden');
+        document.getElementById('btnEditProfile').style.display = 'inline-block';
+        document.getElementById('btnCancelProfile').style.display = 'none';
+    }
+}
+
+// ============================================================
+// Profile Management: Save Profile
+// ============================================================
+async function saveProfile() {
+    var btn = document.getElementById('btnSaveProfile');
+    btn.disabled = true;
+    btn.textContent = 'Saving...';
+
+    var updates = {
+        display_name: document.getElementById('profileDisplayName').value.trim() || null,
+        phone: document.getElementById('profilePhone').value.trim() || null,
+        address: document.getElementById('profileAddress').value.trim() || null,
+        updated_at: new Date().toISOString()
+    };
+
+    var { error } = await sb
+        .from('profiles')
+        .update(updates)
+        .eq('id', currentUser.id);
+
+    if (error) {
+        showToast('Error: ' + error.message, 'error');
+    } else {
+        showToast('อัพเดท profile สำเร็จ!', 'success');
+        toggleProfileEdit(false);
+        loadProfile();
+    }
+
+    btn.disabled = false;
+    btn.textContent = '\uD83D\uDCBE บันทึก';
+}
+
+// ============================================================
+// Device Management: Add Device
+// ============================================================
+async function addDevice() {
+    const deviceId = document.getElementById('addDeviceId').value.trim();
+    if (!deviceId) {
+        showToast('กรุณากรอก Device ID', 'error');
+        return;
+    }
+
+    const btn = document.getElementById('btnAddDevice');
+    btn.disabled = true;
+    btn.textContent = 'Registering...';
+    showLoading('outputAddDevice');
+
+    const deviceName = document.getElementById('addDeviceName').value.trim() || null;
+    const lat = document.getElementById('addLat').value ? parseFloat(document.getElementById('addLat').value) : null;
+    const lng = document.getElementById('addLng').value ? parseFloat(document.getElementById('addLng').value) : null;
+    const isPublic = document.getElementById('addIsPublic').checked;
+
+    const start = performance.now();
+
+    const { data, error } = await sb.rpc('register_device', {
+        p_device_id: deviceId,
+        p_device_name: deviceName,
+        p_latitude: lat,
+        p_longitude: lng,
+        p_is_public: isPublic
+    });
+
+    const elapsed = Math.round(performance.now() - start);
+
+    if (error) {
+        createOutput('outputAddDevice', 'err', 'Error: ' + error.code, formatTime(elapsed), error.message);
+        showToast('เพิ่ม device ไม่สำเร็จ', 'error');
+    } else if (data && data.success === false) {
+        createOutput('outputAddDevice', 'err', 'Failed', formatTime(elapsed), data);
+        showToast(data.error || 'เพิ่ม device ไม่สำเร็จ', 'error');
+    } else {
+        createOutput('outputAddDevice', 'ok', '200 OK', formatTime(elapsed), data);
+        showToast('เพิ่ม device สำเร็จ!', 'success');
+        // เคลียร์ฟอร์ม
+        document.getElementById('addDeviceId').value = '';
+        document.getElementById('addDeviceName').value = '';
+        document.getElementById('addLat').value = '';
+        document.getElementById('addLng').value = '';
+        document.getElementById('addIsPublic').checked = false;
+        // รีโหลดรายการ
+        loadDevices();
+        loadDeviceList();
+    }
+
+    btn.disabled = false;
+    btn.textContent = '\u2795 Register Device';
+}
+
+// ============================================================
+// Device Management: Load Device List (ตาราง)
+// ============================================================
+async function loadDeviceList() {
+    const container = document.getElementById('deviceListContainer');
+    container.innerHTML = '<p style="padding:20px; text-align:center;" class="text-dim">กำลังโหลด...</p>';
+
+    const { data, error } = await sb.rpc('get_my_devices');
+
+    if (error) {
+        container.innerHTML = '<p style="padding:20px; text-align:center; color:var(--red);">Error: ' + sanitizeHTML(error.message) + '</p>';
+        return;
+    }
+
+    if (!data || data.length === 0) {
+        container.innerHTML = '<p style="padding:20px; text-align:center;" class="text-dim">ยังไม่มี device ลงทะเบียน</p>';
+        return;
+    }
+
+    // สร้างตาราง
+    var html = '<div class="device-table-wrap"><table class="device-table">';
+    html += '<thead><tr>';
+    html += '<th>Device ID</th>';
+    html += '<th>Name</th>';
+    html += '<th>Client ID</th>';
+    html += '<th>Location</th>';
+    html += '<th>Public</th>';
+    html += '<th>Actions</th>';
+    html += '</tr></thead><tbody>';
+
+    data.forEach(function(d) {
+        var safeId = sanitizeHTML(d.device_id || '');
+        var safeName = sanitizeHTML(d.device_name || '-');
+        var safeClientId = sanitizeHTML(d.client_id || '-');
+        var locText = (d.latitude && d.longitude)
+            ? sanitizeHTML(Number(d.latitude).toFixed(4) + ', ' + Number(d.longitude).toFixed(4))
+            : '<span class="text-dim">-</span>';
+        var pubBadge = d.is_public
+            ? '<span class="badge-public yes">Public</span>'
+            : '<span class="badge-public no">Private</span>';
+
+        html += '<tr>';
+        html += '<td class="mono">' + safeId + '</td>';
+        html += '<td>' + safeName + '</td>';
+        html += '<td class="mono" style="font-size:11px;">' + safeClientId + '</td>';
+        html += '<td class="mono" style="font-size:11px;">' + locText + '</td>';
+        html += '<td>' + pubBadge + '</td>';
+        html += '<td><div class="td-actions">';
+        html += '<button class="btn btn-ghost btn-sm" onclick="openEditModal(\'' + safeId + '\')">&#9998; Edit</button>';
+        html += '<button class="btn btn-danger btn-sm" onclick="openDeleteModal(\'' + safeId + '\')">&#128465;</button>';
+        html += '</div></td>';
+        html += '</tr>';
+    });
+
+    html += '</tbody></table></div>';
+    container.innerHTML = html;
+}
+
+// ============================================================
+// Device Management: Edit Modal
+// ============================================================
+async function openEditModal(deviceId) {
+    // ดึงข้อมูล device ปัจจุบัน
+    const { data, error } = await sb.rpc('get_my_devices');
+    if (error || !data) return;
+
+    const device = data.find(function(d) { return d.device_id === deviceId; });
+    if (!device) {
+        showToast('ไม่พบ device', 'error');
+        return;
+    }
+
+    // เติมข้อมูลในฟอร์ม
+    document.getElementById('editDeviceId').value = device.device_id || '';
+    document.getElementById('editDeviceName').value = device.device_name || '';
+    document.getElementById('editClientId').value = device.client_id || '';
+    document.getElementById('editLat').value = device.latitude || '';
+    document.getElementById('editLng').value = device.longitude || '';
+    document.getElementById('editIsPublic').checked = device.is_public || false;
+
+    // แสดง modal
+    document.getElementById('editModal').classList.add('active');
+}
+
+function closeEditModal() {
+    document.getElementById('editModal').classList.remove('active');
+}
+
+async function saveDevice() {
+    const deviceId = document.getElementById('editDeviceId').value;
+    const btn = document.getElementById('btnSaveDevice');
+    btn.disabled = true;
+    btn.textContent = 'Saving...';
+
+    const params = {
+        p_device_id: deviceId,
+        p_device_name: document.getElementById('editDeviceName').value.trim() || null,
+        p_client_id: document.getElementById('editClientId').value.trim() || null,
+        p_latitude: document.getElementById('editLat').value ? parseFloat(document.getElementById('editLat').value) : null,
+        p_longitude: document.getElementById('editLng').value ? parseFloat(document.getElementById('editLng').value) : null,
+        p_is_public: document.getElementById('editIsPublic').checked
+    };
+
+    const { data, error } = await sb.rpc('update_device', params);
+
+    if (error) {
+        showToast('Error: ' + error.message, 'error');
+    } else if (data && data.success === false) {
+        showToast(data.error || 'อัพเดทไม่สำเร็จ', 'error');
+    } else {
+        showToast('อัพเดท device สำเร็จ!', 'success');
+        closeEditModal();
+        loadDevices();
+        loadDeviceList();
+    }
+
+    btn.disabled = false;
+    btn.textContent = 'บันทึก';
+}
+
+// ============================================================
+// Device Management: Delete
+// ============================================================
+function openDeleteModal(deviceId) {
+    deleteTargetDeviceId = deviceId;
+    document.getElementById('deleteDeviceIdDisplay').textContent = deviceId;
+    document.getElementById('deleteModal').classList.add('active');
+}
+
+function closeDeleteModal() {
+    deleteTargetDeviceId = '';
+    document.getElementById('deleteModal').classList.remove('active');
+}
+
+async function confirmDelete() {
+    if (!deleteTargetDeviceId) return;
+
+    const btn = document.getElementById('btnConfirmDelete');
+    btn.disabled = true;
+    btn.textContent = 'Deleting...';
+
+    const { data, error } = await sb.rpc('unregister_device', {
+        p_device_id: deleteTargetDeviceId
+    });
+
+    if (error) {
+        showToast('Error: ' + error.message, 'error');
+    } else if (data && data.success === false) {
+        showToast(data.error || 'ลบไม่สำเร็จ', 'error');
+    } else {
+        showToast('ลบ device สำเร็จ!', 'success');
+        closeDeleteModal();
+        loadDevices();
+        loadDeviceList();
+    }
+
+    btn.disabled = false;
+    btn.textContent = '\uD83D\uDDD1 ลบ Device';
+}
+
+// ============================================================
+// Close modal on overlay click
+// ============================================================
+document.getElementById('editModal').addEventListener('click', function(e) {
+    if (e.target === this) closeEditModal();
+});
+document.getElementById('deleteModal').addEventListener('click', function(e) {
+    if (e.target === this) closeDeleteModal();
+});
+
+// ============================================================
+// Initialize
+// ============================================================
+checkSession();
+</script>
+
+</body>
+</html>
