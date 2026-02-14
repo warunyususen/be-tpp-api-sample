@@ -611,6 +611,85 @@
             color: #fff;
         }
 
+        /* ===== Session Expired Banner ===== */
+        .session-banner {
+            background: linear-gradient(135deg, var(--amber-dim), rgba(251, 191, 36, 0.05));
+            border: 1px solid rgba(251, 191, 36, 0.3);
+            border-radius: var(--radius);
+            padding: 16px 20px;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            animation: slideDown 0.3s ease-out;
+        }
+        .session-banner .banner-msg {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 13px;
+            color: var(--amber);
+            font-weight: 600;
+        }
+        .session-banner .banner-msg .banner-icon {
+            font-size: 18px;
+            flex-shrink: 0;
+        }
+        .session-banner .banner-detail {
+            font-size: 12px;
+            color: var(--text-dim);
+            font-weight: 400;
+        }
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateY(-8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ===== Auth Error Message (Magic Link errors) ===== */
+        .auth-error-banner {
+            background: linear-gradient(135deg, var(--red-dim), rgba(248, 113, 113, 0.05));
+            border: 1px solid rgba(248, 113, 113, 0.3);
+            border-radius: 8px;
+            padding: 12px 16px;
+            margin-top: 16px;
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            font-size: 13px;
+            color: var(--red);
+            animation: slideDown 0.3s ease-out;
+        }
+        .auth-error-banner .error-icon {
+            font-size: 16px;
+            flex-shrink: 0;
+            margin-top: 1px;
+        }
+        .auth-error-banner .error-content {
+            flex: 1;
+        }
+        .auth-error-banner .error-title {
+            font-weight: 600;
+            margin-bottom: 2px;
+        }
+        .auth-error-banner .error-desc {
+            font-size: 12px;
+            color: var(--text-dim);
+            font-weight: 400;
+        }
+        .auth-error-banner .error-close {
+            background: none;
+            border: none;
+            color: var(--text-dim);
+            cursor: pointer;
+            font-size: 16px;
+            padding: 0 4px;
+            flex-shrink: 0;
+        }
+        .auth-error-banner .error-close:hover {
+            color: var(--text);
+        }
+
         /* ===== Utilities ===== */
         .hidden { display: none !important; }
         .mt-4 { margin-top: 16px; }
@@ -669,6 +748,8 @@
                 </button>
             </div>
             <p id="authMsg" class="text-sm mt-4" style="display:none;"></p>
+            <!-- Magic Link error banner (แสดงเมื่อ redirect กลับมาพร้อม error) -->
+            <div id="authErrorBanner" class="hidden"></div>
 
             <!-- Divider -->
             <div style="display:flex; align-items:center; gap:12px; margin:20px 0;">
@@ -704,6 +785,18 @@
                 </div>
             </div>
         </div>
+    </div>
+
+    <!-- ===== Session Expired Banner (hidden by default) ===== -->
+    <div class="session-banner hidden" id="sessionExpiredBanner">
+        <div>
+            <div class="banner-msg">
+                <span class="banner-icon">&#9888;</span>
+                <span>Session หมดอายุ</span>
+            </div>
+            <p class="banner-detail">กรุณา login ใหม่เพื่อใช้งาน API ต่อ</p>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="scrollToLogin()">&#8594; Login ใหม่</button>
     </div>
 
     <!-- ===== Device Picker (shown after login) ===== -->
@@ -1024,6 +1117,7 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 let currentUser = null;
 let currentDeviceId = '';
 let deleteTargetDeviceId = '';
+let isManualLogout = false; // Phase 3C: แยก session expired vs user กด logout
 
 // ============================================================
 // Helper: sanitizeHTML — ป้องกัน XSS ทุกจุดที่ render innerHTML
@@ -1079,31 +1173,169 @@ function showToast(message, type) {
 }
 
 // ============================================================
+// Phase 3C: Helper — Parse error hash จาก Magic Link redirect
+// เมื่อ Magic Link หมดอายุหรือถูกปฏิเสธ Supabase redirect กลับมาพร้อม
+// #error=access_denied&error_code=otp_expired&error_description=...
+// ============================================================
+function parseHashError() {
+    var hash = window.location.hash;
+    if (!hash || !hash.includes('error=')) return null;
+
+    // ลบ # นำหน้า แล้ว parse เป็น key=value pairs
+    var params = {};
+    hash.substring(1).split('&').forEach(function(pair) {
+        var parts = pair.split('=');
+        if (parts.length === 2) {
+            params[decodeURIComponent(parts[0])] = decodeURIComponent(parts[1].replace(/\+/g, ' '));
+        }
+    });
+
+    if (!params.error) return null;
+
+    // Map error codes เป็นข้อความภาษาไทย
+    var errorMessages = {
+        'otp_expired': 'Magic Link หมดอายุแล้ว กรุณาขอ Magic Link ใหม่',
+        'access_denied': 'การเข้าถึงถูกปฏิเสธ กรุณาลองใหม่อีกครั้ง',
+        'unauthorized_client': 'ไม่ได้รับอนุญาต กรุณาตรวจสอบการตั้งค่า',
+        'server_error': 'เกิดข้อผิดพลาดที่เซิร์ฟเวอร์ กรุณาลองใหม่'
+    };
+
+    var errorCode = params.error_code || params.error || '';
+    var thaiMessage = errorMessages[errorCode] || errorMessages[params.error] || null;
+
+    return {
+        error: params.error,
+        errorCode: errorCode,
+        description: params.error_description || '',
+        message: thaiMessage || ('เกิดข้อผิดพลาด: ' + (params.error_description || params.error))
+    };
+}
+
+// ============================================================
+// Phase 3C: Helper — ลบ hash fragment ออกจาก URL
+// ============================================================
+function cleanUrlHash() {
+    if (window.location.hash) {
+        window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    }
+}
+
+// ============================================================
+// Phase 3C: Helper — แสดง error banner จาก Magic Link
+// ============================================================
+function showHashError(errorInfo) {
+    var container = document.getElementById('authErrorBanner');
+    container.className = ''; // ลบ hidden class
+    container.innerHTML =
+        '<div class="auth-error-banner">' +
+            '<span class="error-icon">&#9888;</span>' +
+            '<div class="error-content">' +
+                '<div class="error-title">' + sanitizeHTML(errorInfo.message) + '</div>' +
+                (errorInfo.description
+                    ? '<div class="error-desc">(' + sanitizeHTML(errorInfo.errorCode) + ': ' + sanitizeHTML(errorInfo.description) + ')</div>'
+                    : '') +
+            '</div>' +
+            '<button class="error-close" onclick="closeAuthError()" title="ปิด">&times;</button>' +
+        '</div>';
+}
+
+function closeAuthError() {
+    var container = document.getElementById('authErrorBanner');
+    container.className = 'hidden';
+    container.innerHTML = '';
+}
+
+// ============================================================
+// Phase 3C: Session expired handler
+// แยกจาก onLogout() ปกติ — แสดง banner แจ้งเตือน
+// ============================================================
+function onSessionExpired() {
+    // ทำ logout ปกติก่อน
+    onLogout();
+
+    // แสดง session expired banner
+    document.getElementById('sessionExpiredBanner').classList.remove('hidden');
+
+    // แสดง toast แจ้งเตือน
+    showToast('Session หมดอายุ กรุณา login ใหม่', 'error');
+}
+
+function scrollToLogin() {
+    document.getElementById('authCard').scrollIntoView({ behavior: 'smooth' });
+    // Focus ที่ email input
+    setTimeout(function() {
+        document.getElementById('emailInput').focus();
+    }, 400);
+}
+
+// ============================================================
+// Phase 3C: ตรวจ session ก่อนเรียก API — return true ถ้า session ยังใช้ได้
+// ============================================================
+async function ensureSession() {
+    var result = await sb.auth.getSession();
+    var session = result.data.session;
+
+    if (!session) {
+        onSessionExpired();
+        return false;
+    }
+
+    // ตรวจว่า token หมดอายุหรือยัง (เผื่อ auto-refresh ยังไม่ทัน)
+    var expiresAt = session.expires_at; // Unix timestamp (seconds)
+    if (expiresAt && Date.now() / 1000 > expiresAt) {
+        // พยายาม refresh ก่อน
+        var refreshResult = await sb.auth.refreshSession();
+        if (refreshResult.error || !refreshResult.data.session) {
+            onSessionExpired();
+            return false;
+        }
+    }
+
+    return true;
+}
+
+// ============================================================
 // Auth: Check existing session on page load
 // ============================================================
 async function checkSession() {
-    const { data: { session } } = await sb.auth.getSession();
+    // === Phase 3C Round 1: จัดการ error hash ก่อน (Supabase ไม่จัดการ) ===
+    var hashError = parseHashError();
+    if (hashError) {
+        showHashError(hashError);
+        cleanUrlHash();
+        // ไม่ return — ยังเช็ค session ต่อได้ (อาจยัง login อยู่)
+    }
+
+    // เช็ค session ที่มีอยู่
+    var result = await sb.auth.getSession();
+    var session = result.data.session;
     if (session) {
         onLogin(session);
     }
 
-    // Handle magic link callback (token in URL hash)
-    const hash = window.location.hash;
-    if (hash && hash.includes('access_token')) {
-        const { data: { session: newSession }, error } = await sb.auth.getSession();
-        if (newSession) {
-            onLogin(newSession);
-            // ลบ token จาก URL
-            window.history.replaceState(null, '', window.location.pathname);
-        }
-    }
+    // ลบ hash ที่เหลือ (access_token hash หลัง Supabase process แล้ว)
+    cleanUrlHash();
 
-    // Listen for auth changes
+    // === Phase 3C Round 2: Listen for auth state changes ===
     sb.auth.onAuthStateChange(function(event, session) {
         if (event === 'SIGNED_IN' && session) {
             onLogin(session);
+            cleanUrlHash(); // ลบ access_token hash หลัง login สำเร็จ
         } else if (event === 'SIGNED_OUT') {
-            onLogout();
+            // แยกกรณี: user กด logout เอง vs session หมดอายุ
+            if (isManualLogout) {
+                isManualLogout = false;
+                onLogout();
+            } else if (currentUser) {
+                // มี user อยู่แต่ถูก sign out → session expired
+                onSessionExpired();
+            } else {
+                onLogout();
+            }
+        } else if (event === 'TOKEN_REFRESHED' && session) {
+            // Token refresh สำเร็จ — อัพเดทข้อมูล session ใน UI
+            document.getElementById('sessionInfo').textContent =
+                'uid: ' + session.user.id.substring(0, 8) + '... | exp: ' + new Date(session.expires_at * 1000).toLocaleTimeString();
         }
     });
 }
@@ -1209,6 +1441,7 @@ async function loginWithToken() {
 // ============================================================
 function onLogin(session) {
     currentUser = session.user;
+    isManualLogout = false; // Phase 3C: reset flag
     document.getElementById('loginView').classList.add('hidden');
     document.getElementById('loggedInView').classList.remove('hidden');
     document.getElementById('authCard').classList.add('logged-in');
@@ -1220,6 +1453,10 @@ function onLogin(session) {
     document.getElementById('apiSection').classList.remove('hidden');
     document.getElementById('deviceMgmtSection').classList.remove('hidden');
     document.getElementById('profileSection').classList.remove('hidden');
+
+    // Phase 3C: ซ่อน banners เมื่อ login สำเร็จ
+    document.getElementById('sessionExpiredBanner').classList.add('hidden');
+    closeAuthError();
 
     loadDevices();
     loadDeviceList();
@@ -1241,6 +1478,7 @@ function onLogout() {
 }
 
 async function logout() {
+    isManualLogout = true; // Phase 3C: บอกว่า user กด logout เอง
     await sb.auth.signOut();
     onLogout();
 }
@@ -1282,6 +1520,7 @@ function onDeviceChange() {
 // ============================================================
 async function testLatestReadings() {
     if (!currentDeviceId) { alert('เลือก device ก่อน'); return; }
+    if (!await ensureSession()) return; // Phase 3C
     showLoading('outputLatest');
     const start = performance.now();
 
@@ -1309,6 +1548,7 @@ async function testLatestReadings() {
 // ============================================================
 async function testReadingsRange() {
     if (!currentDeviceId) { alert('เลือก device ก่อน'); return; }
+    if (!await ensureSession()) return; // Phase 3C
     showLoading('outputRange');
     const start = performance.now();
 
@@ -1344,6 +1584,7 @@ async function testReadingsRange() {
 // ============================================================
 async function testDeviceStatus() {
     if (!currentDeviceId) { alert('เลือก device ก่อน'); return; }
+    if (!await ensureSession()) return; // Phase 3C
     showLoading('outputStatus');
     const start = performance.now();
 
@@ -1371,6 +1612,7 @@ async function testDeviceStatus() {
 // ============================================================
 async function testFanControl() {
     if (!currentDeviceId) { alert('เลือก device ก่อน'); return; }
+    if (!await ensureSession()) return; // Phase 3C
     showLoading('outputFan');
     const start = performance.now();
 
@@ -1417,6 +1659,7 @@ async function testFanControl() {
 // Test 5: get_my_devices
 // ============================================================
 async function testMyDevices() {
+    if (!await ensureSession()) return; // Phase 3C
     showLoading('outputDevices');
     const start = performance.now();
 
@@ -1545,6 +1788,8 @@ async function toggleProfileEdit(editing) {
 // Profile Management: Save Profile
 // ============================================================
 async function saveProfile() {
+    if (!await ensureSession()) return; // Phase 3C
+
     var btn = document.getElementById('btnSaveProfile');
     btn.disabled = true;
     btn.textContent = 'Saving...';
@@ -1582,6 +1827,8 @@ async function addDevice() {
         showToast('กรุณากรอก Device ID', 'error');
         return;
     }
+
+    if (!await ensureSession()) return; // Phase 3C
 
     const btn = document.getElementById('btnAddDevice');
     btn.disabled = true;
@@ -1692,6 +1939,8 @@ async function loadDeviceList() {
 // ============================================================
 async function openEditModal(deviceId) {
     // ดึงข้อมูล device ปัจจุบัน
+    if (!await ensureSession()) return; // Phase 3C
+
     const { data, error } = await sb.rpc('get_my_devices');
     if (error || !data) return;
 
@@ -1718,6 +1967,8 @@ function closeEditModal() {
 }
 
 async function saveDevice() {
+    if (!await ensureSession()) { closeEditModal(); return; } // Phase 3C
+
     const deviceId = document.getElementById('editDeviceId').value;
     const btn = document.getElementById('btnSaveDevice');
     btn.disabled = true;
@@ -1765,6 +2016,7 @@ function closeDeleteModal() {
 
 async function confirmDelete() {
     if (!deleteTargetDeviceId) return;
+    if (!await ensureSession()) { closeDeleteModal(); return; } // Phase 3C
 
     const btn = document.getElementById('btnConfirmDelete');
     btn.disabled = true;
