@@ -1917,13 +1917,19 @@ function updateSpeedLabel() {
 // Subscribe to INSERT events on device_status filtered by device_id
 // ============================================================
 function subscribeRealtime(deviceId) {
+    if (!deviceId) return;
+
+    // Skip if already subscribed to the same device
+    if (realtimeChannel && realtimeChannel._deviceId === deviceId) {
+        console.log('[Realtime] Already subscribed to:', deviceId);
+        return;
+    }
+
     // Unsubscribe existing channel first
     unsubscribeRealtime();
 
-    if (!deviceId) return;
-
     // Create channel with unique name per device
-    realtimeChannel = sb.channel('device-status-' + deviceId)
+    var channel = sb.channel('device-status-' + deviceId)
         .on(
             'postgres_changes',
             {
@@ -1937,14 +1943,22 @@ function subscribeRealtime(deviceId) {
             }
         )
         .subscribe(function(status) {
-            updateRtBadge(status === 'SUBSCRIBED');
+            // Only update badge on definitive states
             if (status === 'SUBSCRIBED') {
+                updateRtBadge(true);
                 console.log('[Realtime] Subscribed to device_status for:', deviceId);
-            } else if (status === 'CHANNEL_ERROR') {
-                console.warn('[Realtime] Channel error for:', deviceId);
+            } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+                console.warn('[Realtime] Channel ' + status + ' for:', deviceId);
+                updateRtBadge(false);
+            } else if (status === 'CLOSED') {
                 updateRtBadge(false);
             }
+            // Ignore transitional states (e.g. 'joining')
         });
+
+    // Tag channel with device_id for duplicate detection
+    channel._deviceId = deviceId;
+    realtimeChannel = channel;
 }
 
 // ============================================================
@@ -1952,9 +1966,10 @@ function subscribeRealtime(deviceId) {
 // ============================================================
 function unsubscribeRealtime() {
     if (realtimeChannel) {
+        var deviceId = realtimeChannel._deviceId || 'unknown';
         sb.removeChannel(realtimeChannel);
         realtimeChannel = null;
-        console.log('[Realtime] Unsubscribed');
+        console.log('[Realtime] Unsubscribed from:', deviceId);
     }
     updateRtBadge(false);
 }
