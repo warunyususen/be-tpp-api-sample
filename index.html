@@ -735,12 +735,12 @@
     <div class="auth-card" id="authCard">
         <span class="section-tag tag-auth">&#9312; Authentication</span>
         <h2 style="font-size:18px; margin-bottom:4px;">Supabase Magic Link</h2>
-        <p class="text-sm text-dim">Login ด้วย email เพื่อรับ session token สำหรับเรียก API</p>
+        <p class="text-sm text-dim">Login with email to get a session token for API calls</p>
 
         <!-- Login Form -->
         <div id="loginView">
             <!-- Method 1: Magic Link -->
-            <p class="text-sm" style="color:var(--accent); font-weight:600; margin-bottom:6px;">วิธีที่ 1: Magic Link</p>
+            <p class="text-sm" style="color:var(--accent); font-weight:600; margin-bottom:6px;">Method 1: Magic Link</p>
             <div class="auth-form">
                 <input type="email" id="emailInput" placeholder="your@email.com" />
                 <button class="btn btn-primary" id="btnSendMagicLink" onclick="sendMagicLink()">
@@ -748,23 +748,23 @@
                 </button>
             </div>
             <p id="authMsg" class="text-sm mt-4" style="display:none;"></p>
-            <!-- Magic Link error banner (แสดงเมื่อ redirect กลับมาพร้อม error) -->
+            <!-- Magic Link error banner (shown on redirect with error) -->
             <div id="authErrorBanner" class="hidden"></div>
 
             <!-- Divider -->
             <div style="display:flex; align-items:center; gap:12px; margin:20px 0;">
                 <div style="flex:1; height:1px; background:var(--border);"></div>
-                <span class="text-sm text-dim">หรือ</span>
+                <span class="text-sm text-dim">or</span>
                 <div style="flex:1; height:1px; background:var(--border);"></div>
             </div>
 
             <!-- Method 2: Paste Token -->
-            <p class="text-sm" style="color:var(--amber); font-weight:600; margin-bottom:6px;">วิธีที่ 2: Paste Token (สำหรับ local file)</p>
+            <p class="text-sm" style="color:var(--amber); font-weight:600; margin-bottom:6px;">Method 2: Paste Token (for local file)</p>
             <p class="text-sm text-dim" style="margin-bottom:8px;">
-                หลังคลิก Magic Link &#8594; copy <code style="color:var(--accent);">access_token=...</code> จาก URL ที่ redirect &#8594; วางด้านล่าง
+                After clicking Magic Link &#8594; copy <code style="color:var(--accent);">access_token=...</code> from redirect URL &#8594; paste below
             </p>
             <div class="auth-form">
-                <input type="text" id="tokenInput" placeholder="วาง access_token ที่นี่ (eyJhb...)" style="font-size:12px;" />
+                <input type="text" id="tokenInput" placeholder="Paste access_token here (eyJhb...)" style="font-size:12px;" />
                 <button class="btn btn-ghost" onclick="loginWithToken()">
                     Login with Token
                 </button>
@@ -792,11 +792,11 @@
         <div>
             <div class="banner-msg">
                 <span class="banner-icon">&#9888;</span>
-                <span>Session หมดอายุ</span>
+                <span>Session Expired</span>
             </div>
-            <p class="banner-detail">กรุณา login ใหม่เพื่อใช้งาน API ต่อ</p>
+            <p class="banner-detail">Please login again to continue using API</p>
         </div>
-        <button class="btn btn-primary btn-sm" onclick="scrollToLogin()">&#8594; Login ใหม่</button>
+        <button class="btn btn-primary btn-sm" onclick="scrollToLogin()">&#8594; Login Again</button>
     </div>
 
     <!-- ===== Device Picker (shown after login) ===== -->
@@ -823,7 +823,7 @@
                 </button>
             </div>
             <div class="api-card-body">
-                <p>ดึงข้อมูล sensor ล่าสุดของ device ที่เลือก พร้อม age_seconds</p>
+                <p>Get latest sensor reading for selected device with age_seconds</p>
                 <div id="outputLatest"></div>
             </div>
         </div>
@@ -840,15 +840,15 @@
                 </button>
             </div>
             <div class="api-card-body">
-                <p>ดึงข้อมูล sensor ในช่วงเวลา (สูงสุด 7 วัน, 2000 rows)</p>
+                <p>Get sensor readings in time range (max 7 days, 2000 rows)</p>
                 <div class="param-row">
                     <span class="param-label">hours_ago</span>
                     <select class="param-input" id="rangeHours">
-                        <option value="1">1 ชั่วโมง</option>
-                        <option value="6">6 ชั่วโมง</option>
-                        <option value="24" selected>24 ชั่วโมง (1 วัน)</option>
-                        <option value="72">72 ชั่วโมง (3 วัน)</option>
-                        <option value="168">168 ชั่วโมง (7 วัน)</option>
+                        <option value="1">1 hour</option>
+                        <option value="6">6 hours</option>
+                        <option value="24" selected>24 hours (1 day)</option>
+                        <option value="72">72 hours (3 days)</option>
+                        <option value="168">168 hours (7 days)</option>
                     </select>
                 </div>
                 <div id="outputRange"></div>
@@ -867,7 +867,7 @@
                 </button>
             </div>
             <div class="api-card-body">
-                <p>ดึงสถานะล่าสุดของ device (fan, firmware, network, online/offline)</p>
+                <p>Get latest device status (fan, firmware, network, online/offline)</p>
                 <div id="outputStatus"></div>
             </div>
         </div>
@@ -884,12 +884,12 @@
                 </button>
             </div>
             <div class="api-card-body">
-                <p>สั่งควบคุมพัดลมผ่าน Edge Function &#8594; EMQX MQTT</p>
+                <p>Send fan control command via Edge Function &#8594; EMQX MQTT</p>
                 <div class="param-row">
                     <span class="param-label">command</span>
                     <select class="param-input" id="fanCommand" onchange="onFanCommandChange()">
-                        <option value="mode">mode (เปลี่ยนโหมด)</option>
-                        <option value="speed">speed (ปรับความเร็ว)</option>
+                        <option value="mode">mode (change mode)</option>
+                        <option value="speed">speed (adjust speed)</option>
                     </select>
                 </div>
                 <div class="param-row" id="modeValueRow">
@@ -922,11 +922,71 @@
                 </button>
             </div>
             <div class="api-card-body">
-                <p>ดึงรายการ devices ทั้งหมดของ user (สร้างไว้แล้วใน Phase 2A)</p>
+                <p>Get all devices registered to current user (Phase 2A)</p>
                 <div id="outputDevices"></div>
             </div>
         </div>
-    </div>
+
+        <!-- Card 6: get_device_status_range (Phase 3D) -->
+        <div class="api-card">
+            <div class="api-card-header">
+                <h3>
+                    <span class="method-badge method-rpc">RPC</span>
+                    get_device_status_range
+                </h3>
+                <button class="btn btn-primary btn-sm" onclick="testDeviceStatusRange()" id="btnStatusRange">
+                    &#9654; Run
+                </button>
+            </div>
+            <div class="api-card-body">
+                <p>Get device status history in time range (max 7 days, 2000 rows)</p>
+                <div class="param-row">
+                    <span class="param-label">hours_ago</span>
+                    <select class="param-input" id="statusRangeHours">
+                        <option value="1">1 hour</option>
+                        <option value="6">6 hours</option>
+                        <option value="24" selected>24 hours (1 day)</option>
+                        <option value="72">72 hours (3 days)</option>
+                        <option value="168">168 hours (7 days)</option>
+                    </select>
+                </div>
+                <div id="outputStatusRange"></div>
+            </div>
+        </div>
+
+        <!-- Card 7: get_air_quality_map (Phase 3D) -->
+        <div class="api-card">
+            <div class="api-card-header">
+                <h3>
+                    <span class="method-badge method-rpc">RPC</span>
+                    get_air_quality_map
+                </h3>
+                <button class="btn btn-primary btn-sm" onclick="testAirQualityMap()">
+                    &#9654; Run
+                </button>
+            </div>
+            <div class="api-card-body">
+                <p>Get public devices with is_public=true and latest sensor data (Phase 2A function)</p>
+                <div id="outputAirQualityMap"></div>
+            </div>
+        </div>
+
+        <!-- Card 8: get_public_air_quality (Phase 3D) -->
+        <div class="api-card">
+            <div class="api-card-header">
+                <h3>
+                    <span class="method-badge method-rpc">RPC</span>
+                    get_public_air_quality
+                </h3>
+                <button class="btn btn-primary btn-sm" onclick="testPublicAirQuality()">
+                    &#9654; Run
+                </button>
+            </div>
+            <div class="api-card-body">
+                <p>Get all devices with lat/lng + latest sensor. Public devices get extra info (Phase 3D)</p>
+                <div id="outputPublicAirQuality"></div>
+            </div>
+        </div>    </div>
 
     <!-- ===== Section: Profile Management (shown after login) ===== -->
     <div class="hidden" id="profileSection">
@@ -939,17 +999,17 @@
 
             <div class="api-card">
                 <div class="api-card-header">
-                    <h3>&#128100; ข้อมูลส่วนตัว</h3>
+                    <h3>&#128100; Personal Info</h3>
                     <div style="display:flex; gap:8px;">
-                        <button class="btn btn-ghost btn-sm" onclick="toggleProfileEdit(false)" id="btnCancelProfile" style="display:none;">ยกเลิก</button>
-                        <button class="btn btn-ghost btn-sm" onclick="toggleProfileEdit(true)" id="btnEditProfile">&#9998; แก้ไข</button>
+                        <button class="btn btn-ghost btn-sm" onclick="toggleProfileEdit(false)" id="btnCancelProfile" style="display:none;">Cancel</button>
+                        <button class="btn btn-ghost btn-sm" onclick="toggleProfileEdit(true)" id="btnEditProfile">&#9998; Edit</button>
                     </div>
                 </div>
                 <div class="api-card-body">
                     <!-- View Mode -->
                     <div id="profileView">
                         <div id="profileViewContent">
-                            <p style="text-align:center;" class="text-dim">กำลังโหลด...</p>
+                            <p style="text-align:center;" class="text-dim">Loading...</p>
                         </div>
                     </div>
 
@@ -957,24 +1017,24 @@
                     <div id="profileEdit" class="hidden">
                         <div class="form-grid">
                             <div class="form-group full-width">
-                                <label>Email (ไม่สามารถแก้ไขได้)</label>
+                                <label>Email (read-only)</label>
                                 <input type="text" id="profileEmail" disabled style="opacity:0.5;" />
                             </div>
                             <div class="form-group">
                                 <label>Display Name</label>
-                                <input type="text" id="profileDisplayName" placeholder="ชื่อที่ต้องการแสดง" maxlength="50" />
+                                <input type="text" id="profileDisplayName" placeholder="Display name" maxlength="50" />
                             </div>
                             <div class="form-group">
                                 <label>Phone</label>
-                                <input type="tel" id="profilePhone" placeholder="เช่น 081-234-5678" maxlength="20" />
+                                <input type="tel" id="profilePhone" placeholder="e.g. 081-234-5678" maxlength="20" />
                             </div>
                             <div class="form-group full-width">
                                 <label>Address</label>
-                                <input type="text" id="profileAddress" placeholder="ที่อยู่" maxlength="200" />
+                                <input type="text" id="profileAddress" placeholder="Address" maxlength="200" />
                             </div>
                         </div>
                         <div class="api-actions">
-                            <button class="btn btn-primary" onclick="saveProfile()" id="btnSaveProfile">&#128190; บันทึก</button>
+                            <button class="btn btn-primary" onclick="saveProfile()" id="btnSaveProfile">&#128190; Save</button>
                         </div>
                     </div>
                 </div>
@@ -994,30 +1054,30 @@
             <!-- Add Device Card -->
             <div class="api-card" style="margin-bottom:16px;">
                 <div class="api-card-header">
-                    <h3>&#10133; เพิ่ม Device ใหม่</h3>
+                    <h3>&#10133; Add New Device</h3>
                 </div>
                 <div class="api-card-body">
-                    <p>ลงทะเบียน device ใหม่ผ่าน register_device() &#8212; กรอก Device ID (Serial) ที่พิมพ์อยู่บนตัวเครื่อง</p>
+                    <p>Register a new device via register_device() &#8212; enter the Device ID (Serial) printed on the device</p>
                     <div class="form-grid">
                         <div class="form-group">
                             <label>Device ID (Serial) *</label>
-                            <input type="text" id="addDeviceId" placeholder="เช่น 582D34712B45" maxlength="20" />
+                            <input type="text" id="addDeviceId" placeholder="e.g. 582D34712B45" maxlength="20" />
                         </div>
                         <div class="form-group">
                             <label>Device Name</label>
-                            <input type="text" id="addDeviceName" placeholder="เช่น ห้องนอน, สำนักงาน" maxlength="50" />
+                            <input type="text" id="addDeviceName" placeholder="e.g. Bedroom, Office" maxlength="50" />
                         </div>
                         <div class="form-group">
                             <label>Latitude</label>
-                            <input type="number" id="addLat" placeholder="เช่น 17.4138" step="any" />
+                            <input type="number" id="addLat" placeholder="e.g. 17.4138" step="any" />
                         </div>
                         <div class="form-group">
                             <label>Longitude</label>
-                            <input type="number" id="addLng" placeholder="เช่น 102.7874" step="any" />
+                            <input type="number" id="addLng" placeholder="e.g. 102.7874" step="any" />
                         </div>
                         <div class="checkbox-row">
                             <input type="checkbox" id="addIsPublic" />
-                            <label for="addIsPublic">แสดงบน Air Quality Map (สาธารณะ)</label>
+                            <label for="addIsPublic">Show on Air Quality Map (public)</label>
                         </div>
                     </div>
                     <div class="api-actions">
@@ -1032,12 +1092,12 @@
             <!-- Device List Card -->
             <div class="api-card">
                 <div class="api-card-header">
-                    <h3>&#128203; Devices ของฉัน</h3>
+                    <h3>&#128203; My Devices</h3>
                     <button class="btn btn-ghost btn-sm" onclick="loadDeviceList()">&#8635; Refresh</button>
                 </div>
                 <div class="api-card-body" style="padding:0;">
                     <div id="deviceListContainer">
-                        <p style="padding:20px; text-align:center;" class="text-dim">กำลังโหลด...</p>
+                        <p style="padding:20px; text-align:center;" class="text-dim">Loading...</p>
                     </div>
                 </div>
             </div>
@@ -1049,19 +1109,19 @@
 <!-- ===== Edit Device Modal ===== -->
 <div class="modal-overlay" id="editModal">
     <div class="modal">
-        <div class="modal-title">&#9998; แก้ไข Device</div>
+        <div class="modal-title">&#9998; Edit Device</div>
         <div class="form-grid">
             <div class="form-group full-width">
-                <label>Device ID (ไม่สามารถแก้ไขได้)</label>
+                <label>Device ID (read-only)</label>
                 <input type="text" id="editDeviceId" disabled style="opacity:0.5;" />
             </div>
             <div class="form-group full-width">
                 <label>Device Name</label>
-                <input type="text" id="editDeviceName" placeholder="ชื่อ device" maxlength="50" />
+                <input type="text" id="editDeviceName" placeholder="Device name" maxlength="50" />
             </div>
             <div class="form-group full-width">
                 <label>Client ID (ESP32 MAC)</label>
-                <input type="text" id="editClientId" placeholder="เช่น be-tpp-cca7f7f924f0" maxlength="30" />
+                <input type="text" id="editClientId" placeholder="e.g. be-tpp-cca7f7f924f0" maxlength="30" />
             </div>
             <div class="form-group">
                 <label>Latitude</label>
@@ -1073,12 +1133,12 @@
             </div>
             <div class="checkbox-row">
                 <input type="checkbox" id="editIsPublic" />
-                <label for="editIsPublic">แสดงบน Air Quality Map (สาธารณะ)</label>
+                <label for="editIsPublic">Show on Air Quality Map (public)</label>
             </div>
         </div>
         <div class="modal-actions">
-            <button class="btn btn-ghost" onclick="closeEditModal()">ยกเลิก</button>
-            <button class="btn btn-primary" onclick="saveDevice()" id="btnSaveDevice">บันทึก</button>
+            <button class="btn btn-ghost" onclick="closeEditModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="saveDevice()" id="btnSaveDevice">Save</button>
         </div>
     </div>
 </div>
@@ -1086,13 +1146,13 @@
 <!-- ===== Delete Confirmation Modal ===== -->
 <div class="modal-overlay" id="deleteModal">
     <div class="modal">
-        <div class="modal-title" style="color:var(--red);">&#9888; ลบ Device</div>
-        <p class="confirm-text">คุณต้องการลบ device นี้หรือไม่?</p>
+        <div class="modal-title" style="color:var(--red);">&#9888; Delete Device</div>
+        <p class="confirm-text">Are you sure you want to delete this device?</p>
         <div class="confirm-device-id" id="deleteDeviceIdDisplay"></div>
-        <p class="confirm-text">การลบจะยกเลิกการลงทะเบียน device ออกจากบัญชีของคุณ ข้อมูล sensor ที่บันทึกไว้จะยังคงอยู่</p>
+        <p class="confirm-text">This will unregister the device from your account. Existing sensor data will be preserved.</p>
         <div class="modal-actions">
-            <button class="btn btn-ghost" onclick="closeDeleteModal()">ยกเลิก</button>
-            <button class="btn btn-danger" onclick="confirmDelete()" id="btnConfirmDelete">&#128465; ลบ Device</button>
+            <button class="btn btn-ghost" onclick="closeDeleteModal()">Cancel</button>
+            <button class="btn btn-danger" onclick="confirmDelete()" id="btnConfirmDelete">&#128465; Delete Device</button>
         </div>
     </div>
 </div>
@@ -1117,10 +1177,10 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 let currentUser = null;
 let currentDeviceId = '';
 let deleteTargetDeviceId = '';
-let isManualLogout = false; // Phase 3C: แยก session expired vs user กด logout
+let isManualLogout = false; // Phase 3C: Distinguish session expired vs manual logout
 
 // ============================================================
-// Helper: sanitizeHTML — ป้องกัน XSS ทุกจุดที่ render innerHTML
+// Helper: sanitizeHTML — prevent XSS on all innerHTML renders
 // ============================================================
 function sanitizeHTML(str) {
     const temp = document.createElement('div');
@@ -1173,15 +1233,15 @@ function showToast(message, type) {
 }
 
 // ============================================================
-// Phase 3C: Helper — Parse error hash จาก Magic Link redirect
-// เมื่อ Magic Link หมดอายุหรือถูกปฏิเสธ Supabase redirect กลับมาพร้อม
+// Phase 3C: Helper — Parse error hash from Magic Link redirect
+// When Magic Link expired or rejected, Supabase redirects with error
 // #error=access_denied&error_code=otp_expired&error_description=...
 // ============================================================
 function parseHashError() {
     var hash = window.location.hash;
     if (!hash || !hash.includes('error=')) return null;
 
-    // ลบ # นำหน้า แล้ว parse เป็น key=value pairs
+    // Remove leading # then parse as key=value pairs
     var params = {};
     hash.substring(1).split('&').forEach(function(pair) {
         var parts = pair.split('=');
@@ -1192,12 +1252,12 @@ function parseHashError() {
 
     if (!params.error) return null;
 
-    // Map error codes เป็นข้อความภาษาไทย
+    // Map error codes to user-friendly messages
     var errorMessages = {
-        'otp_expired': 'Magic Link หมดอายุแล้ว กรุณาขอ Magic Link ใหม่',
-        'access_denied': 'การเข้าถึงถูกปฏิเสธ กรุณาลองใหม่อีกครั้ง',
-        'unauthorized_client': 'ไม่ได้รับอนุญาต กรุณาตรวจสอบการตั้งค่า',
-        'server_error': 'เกิดข้อผิดพลาดที่เซิร์ฟเวอร์ กรุณาลองใหม่'
+        'otp_expired': 'Magic Link has expired. Please request a new one.',
+        'access_denied': 'Access denied. Please try again.',
+        'unauthorized_client': 'Unauthorized client. Please check configuration.',
+        'server_error': 'Server error. Please try again later.'
     };
 
     var errorCode = params.error_code || params.error || '';
@@ -1207,12 +1267,12 @@ function parseHashError() {
         error: params.error,
         errorCode: errorCode,
         description: params.error_description || '',
-        message: thaiMessage || ('เกิดข้อผิดพลาด: ' + (params.error_description || params.error))
+        message: thaiMessage || ('Error: ' + (params.error_description || params.error))
     };
 }
 
 // ============================================================
-// Phase 3C: Helper — ลบ hash fragment ออกจาก URL
+// Phase 3C: Helper — Remove hash fragment from URL
 // ============================================================
 function cleanUrlHash() {
     if (window.location.hash) {
@@ -1221,11 +1281,11 @@ function cleanUrlHash() {
 }
 
 // ============================================================
-// Phase 3C: Helper — แสดง error banner จาก Magic Link
+// Phase 3C: Helper — Show error banner from Magic Link
 // ============================================================
 function showHashError(errorInfo) {
     var container = document.getElementById('authErrorBanner');
-    container.className = ''; // ลบ hidden class
+    container.className = ''; // Remove hidden class
     container.innerHTML =
         '<div class="auth-error-banner">' +
             '<span class="error-icon">&#9888;</span>' +
@@ -1235,7 +1295,7 @@ function showHashError(errorInfo) {
                     ? '<div class="error-desc">(' + sanitizeHTML(errorInfo.errorCode) + ': ' + sanitizeHTML(errorInfo.description) + ')</div>'
                     : '') +
             '</div>' +
-            '<button class="error-close" onclick="closeAuthError()" title="ปิด">&times;</button>' +
+            '<button class="error-close" onclick="closeAuthError()" title="Close">&times;</button>' +
         '</div>';
 }
 
@@ -1247,29 +1307,29 @@ function closeAuthError() {
 
 // ============================================================
 // Phase 3C: Session expired handler
-// แยกจาก onLogout() ปกติ — แสดง banner แจ้งเตือน
+// Separate from normal onLogout() — show session expired banner
 // ============================================================
 function onSessionExpired() {
-    // ทำ logout ปกติก่อน
+    // Run normal logout first
     onLogout();
 
-    // แสดง session expired banner
+    // Show session expired banner
     document.getElementById('sessionExpiredBanner').classList.remove('hidden');
 
-    // แสดง toast แจ้งเตือน
-    showToast('Session หมดอายุ กรุณา login ใหม่', 'error');
+    // Show warning toast
+    showToast('Session expired. Please login again.', 'error');
 }
 
 function scrollToLogin() {
     document.getElementById('authCard').scrollIntoView({ behavior: 'smooth' });
-    // Focus ที่ email input
+    // Focus on email input
     setTimeout(function() {
         document.getElementById('emailInput').focus();
     }, 400);
 }
 
 // ============================================================
-// Phase 3C: ตรวจ session ก่อนเรียก API — return true ถ้า session ยังใช้ได้
+// Phase 3C: Check session before API call — returns true if session is valid
 // ============================================================
 async function ensureSession() {
     var result = await sb.auth.getSession();
@@ -1280,10 +1340,10 @@ async function ensureSession() {
         return false;
     }
 
-    // ตรวจว่า token หมดอายุหรือยัง (เผื่อ auto-refresh ยังไม่ทัน)
+    // Check if token expired (in case auto-refresh not fired yet)
     var expiresAt = session.expires_at; // Unix timestamp (seconds)
     if (expiresAt && Date.now() / 1000 > expiresAt) {
-        // พยายาม refresh ก่อน
+        // Try to refresh first
         var refreshResult = await sb.auth.refreshSession();
         if (refreshResult.error || !refreshResult.data.session) {
             onSessionExpired();
@@ -1298,42 +1358,42 @@ async function ensureSession() {
 // Auth: Check existing session on page load
 // ============================================================
 async function checkSession() {
-    // === Phase 3C Round 1: จัดการ error hash ก่อน (Supabase ไม่จัดการ) ===
+    // === Phase 3C Round 1: Handle error hash before Supabase processes ===
     var hashError = parseHashError();
     if (hashError) {
         showHashError(hashError);
         cleanUrlHash();
-        // ไม่ return — ยังเช็ค session ต่อได้ (อาจยัง login อยู่)
+        // Don't return — still check session below (user might be logged in)
     }
 
-    // เช็ค session ที่มีอยู่
+    // Check existing session
     var result = await sb.auth.getSession();
     var session = result.data.session;
     if (session) {
         onLogin(session);
     }
 
-    // ลบ hash ที่เหลือ (access_token hash หลัง Supabase process แล้ว)
+    // Clean remaining hash (access_token hash after Supabase processed)
     cleanUrlHash();
 
     // === Phase 3C Round 2: Listen for auth state changes ===
     sb.auth.onAuthStateChange(function(event, session) {
         if (event === 'SIGNED_IN' && session) {
             onLogin(session);
-            cleanUrlHash(); // ลบ access_token hash หลัง login สำเร็จ
+            cleanUrlHash(); // Remove access_token hash after successful login
         } else if (event === 'SIGNED_OUT') {
-            // แยกกรณี: user กด logout เอง vs session หมดอายุ
+            // Distinguish: manual logout vs session expired
             if (isManualLogout) {
                 isManualLogout = false;
                 onLogout();
             } else if (currentUser) {
-                // มี user อยู่แต่ถูก sign out → session expired
+                // Had user but signed out -> session expired
                 onSessionExpired();
             } else {
                 onLogout();
             }
         } else if (event === 'TOKEN_REFRESHED' && session) {
-            // Token refresh สำเร็จ — อัพเดทข้อมูล session ใน UI
+            // Token refresh success — update session info in UI
             document.getElementById('sessionInfo').textContent =
                 'uid: ' + session.user.id.substring(0, 8) + '... | exp: ' + new Date(session.expires_at * 1000).toLocaleTimeString();
         }
@@ -1346,7 +1406,7 @@ async function checkSession() {
 async function sendMagicLink() {
     const email = document.getElementById('emailInput').value.trim();
     if (!email) {
-        showAuthMsg('กรุณากรอก email', 'red');
+        showAuthMsg('Please enter your email', 'red');
         return;
     }
 
@@ -1364,7 +1424,7 @@ async function sendMagicLink() {
     if (error) {
         showAuthMsg('Error: ' + error.message, 'red');
     } else {
-        showAuthMsg('Magic Link ส่งไปที่ ' + email + ' แล้ว — ตรวจสอบ inbox', 'green');
+        showAuthMsg('Magic Link sent to ' + email + ' — check your inbox', 'green');
     }
 
     btn.disabled = false;
@@ -1379,7 +1439,7 @@ function showAuthMsg(msg, color) {
 }
 
 // ============================================================
-// Auth: Login with Paste Token (สำหรับใช้งาน local file://)
+// Auth: Login with Paste Token (for local file://)
 // ============================================================
 async function loginWithToken() {
     const msgEl = document.getElementById('tokenMsg');
@@ -1388,17 +1448,17 @@ async function loginWithToken() {
     if (!raw) {
         msgEl.style.display = 'block';
         msgEl.style.color = 'var(--red)';
-        msgEl.textContent = 'กรุณาวาง access_token';
+        msgEl.textContent = 'Please paste an access_token';
         return;
     }
 
-    // Extract access_token จาก full URL หรือ hash fragment
+    // Extract access_token from full URL or hash fragment
     if (raw.includes('access_token=')) {
         const match = raw.match(/access_token=([^&]+)/);
         if (match) raw = match[1];
     }
 
-    // Extract refresh_token ถ้ามี
+    // Extract refresh_token if available
     let refreshToken = '';
     const inputFull = document.getElementById('tokenInput').value.trim();
     if (inputFull.includes('refresh_token=')) {
@@ -1424,11 +1484,11 @@ async function loginWithToken() {
 
         if (data.session) {
             msgEl.style.color = 'var(--green)';
-            msgEl.textContent = 'Login สำเร็จ!';
+            msgEl.textContent = 'Login successful!';
             onLogin(data.session);
         } else {
             msgEl.style.color = 'var(--red)';
-            msgEl.textContent = 'Token ไม่ถูกต้องหรือหมดอายุ';
+            msgEl.textContent = 'Invalid or expired token';
         }
     } catch (e) {
         msgEl.style.color = 'var(--red)';
@@ -1454,7 +1514,7 @@ function onLogin(session) {
     document.getElementById('deviceMgmtSection').classList.remove('hidden');
     document.getElementById('profileSection').classList.remove('hidden');
 
-    // Phase 3C: ซ่อน banners เมื่อ login สำเร็จ
+    // Phase 3C: Hide banners on successful login
     document.getElementById('sessionExpiredBanner').classList.add('hidden');
     closeAuthError();
 
@@ -1478,13 +1538,13 @@ function onLogout() {
 }
 
 async function logout() {
-    isManualLogout = true; // Phase 3C: บอกว่า user กด logout เอง
+    isManualLogout = true; // Phase 3C: Mark as manual logout
     await sb.auth.signOut();
     onLogout();
 }
 
 // ============================================================
-// Devices: Load dropdown (สำหรับ API Test)
+// Devices: Load dropdown for API Test
 // ============================================================
 async function loadDevices() {
     const select = document.getElementById('deviceSelect');
@@ -1519,7 +1579,7 @@ function onDeviceChange() {
 // Test 1: get_latest_readings
 // ============================================================
 async function testLatestReadings() {
-    if (!currentDeviceId) { alert('เลือก device ก่อน'); return; }
+    if (!currentDeviceId) { alert('Please select a device first'); return; }
     if (!await ensureSession()) return; // Phase 3C
     showLoading('outputLatest');
     const start = performance.now();
@@ -1547,7 +1607,7 @@ async function testLatestReadings() {
 // Test 2: get_readings_range
 // ============================================================
 async function testReadingsRange() {
-    if (!currentDeviceId) { alert('เลือก device ก่อน'); return; }
+    if (!currentDeviceId) { alert('Please select a device first'); return; }
     if (!await ensureSession()) return; // Phase 3C
     showLoading('outputRange');
     const start = performance.now();
@@ -1583,7 +1643,7 @@ async function testReadingsRange() {
 // Test 3: get_device_status
 // ============================================================
 async function testDeviceStatus() {
-    if (!currentDeviceId) { alert('เลือก device ก่อน'); return; }
+    if (!currentDeviceId) { alert('Please select a device first'); return; }
     if (!await ensureSession()) return; // Phase 3C
     showLoading('outputStatus');
     const start = performance.now();
@@ -1611,7 +1671,7 @@ async function testDeviceStatus() {
 // Test 4: fan_control (Edge Function)
 // ============================================================
 async function testFanControl() {
-    if (!currentDeviceId) { alert('เลือก device ก่อน'); return; }
+    if (!currentDeviceId) { alert('Please select a device first'); return; }
     if (!await ensureSession()) return; // Phase 3C
     showLoading('outputFan');
     const start = performance.now();
@@ -1651,7 +1711,7 @@ async function testFanControl() {
     } catch (err) {
         const elapsed = Math.round(performance.now() - start);
         createOutput('outputFan', 'err', 'Network Error', formatTime(elapsed),
-            'Edge Function ยังไม่ได้ deploy หรือ URL ไม่ถูกต้อง\n\n' + err.message);
+            'Edge Function not deployed yet or URL is incorrect\n\n' + err.message);
     }
 }
 
@@ -1675,6 +1735,82 @@ async function testMyDevices() {
     createOutput('outputDevices', 'ok', '200 OK \u2014 ' + data.length + ' devices', formatTime(elapsed), data);
 }
 
+
+// ============================================================
+// Test 6: get_device_status_range (Phase 3D)
+// ============================================================
+async function testDeviceStatusRange() {
+    if (!currentDeviceId) { alert('Please select a device first'); return; }
+    if (!await ensureSession()) return;
+    showLoading('outputStatusRange');
+    const start = performance.now();
+
+    const hours = parseInt(document.getElementById('statusRangeHours').value);
+    const now = new Date();
+    const past = new Date(now.getTime() - hours * 60 * 60 * 1000);
+
+    const { data, error } = await sb.rpc('get_device_status_range', {
+        p_device_id: currentDeviceId,
+        p_start: past.toISOString(),
+        p_end: now.toISOString()
+    });
+
+    const elapsed = Math.round(performance.now() - start);
+
+    if (error) {
+        createOutput('outputStatusRange', 'err', 'Error: ' + error.code, formatTime(elapsed), error.message);
+        return;
+    }
+
+    const summary = {
+        total_rows: data.length,
+        time_range: past.toLocaleString() + ' \u2192 ' + now.toLocaleString(),
+        first_status: data.length > 0 ? data[0] : null,
+        last_status: data.length > 0 ? data[data.length - 1] : null,
+    };
+
+    createOutput('outputStatusRange', 'ok', '200 OK \u2014 ' + data.length + ' rows', formatTime(elapsed), summary);
+}
+
+// ============================================================
+// Test 7: get_air_quality_map (Phase 2A function, Phase 3D UI)
+// ============================================================
+async function testAirQualityMap() {
+    if (!await ensureSession()) return;
+    showLoading('outputAirQualityMap');
+    const start = performance.now();
+
+    const { data, error } = await sb.rpc('get_air_quality_map');
+
+    const elapsed = Math.round(performance.now() - start);
+
+    if (error) {
+        createOutput('outputAirQualityMap', 'err', 'Error: ' + error.code, formatTime(elapsed), error.message);
+        return;
+    }
+
+    createOutput('outputAirQualityMap', 'ok', '200 OK \u2014 ' + (data ? data.length : 0) + ' devices', formatTime(elapsed), data);
+}
+
+// ============================================================
+// Test 8: get_public_air_quality (Phase 3D)
+// ============================================================
+async function testPublicAirQuality() {
+    if (!await ensureSession()) return;
+    showLoading('outputPublicAirQuality');
+    const start = performance.now();
+
+    const { data, error } = await sb.rpc('get_public_air_quality');
+
+    const elapsed = Math.round(performance.now() - start);
+
+    if (error) {
+        createOutput('outputPublicAirQuality', 'err', 'Error: ' + error.code, formatTime(elapsed), error.message);
+        return;
+    }
+
+    createOutput('outputPublicAirQuality', 'ok', '200 OK \u2014 ' + (data ? data.length : 0) + ' devices', formatTime(elapsed), data);
+}
 // ============================================================
 // UI Helpers (Fan Control)
 // ============================================================
@@ -1693,7 +1829,7 @@ function updateSpeedLabel() {
 // ============================================================
 async function loadProfile() {
     var container = document.getElementById('profileViewContent');
-    container.innerHTML = '<p style="text-align:center;" class="text-dim">กำลังโหลด...</p>';
+    container.innerHTML = '<p style="text-align:center;" class="text-dim">Loading...</p>';
 
     var { data, error } = await sb
         .from('profiles')
@@ -1707,7 +1843,7 @@ async function loadProfile() {
     }
 
     if (!data) {
-        container.innerHTML = '<p style="text-align:center;" class="text-dim">ไม่พบข้อมูล profile</p>';
+        container.innerHTML = '<p style="text-align:center;" class="text-dim">No profile data found</p>';
         return;
     }
 
@@ -1717,9 +1853,9 @@ async function loadProfile() {
 function renderProfileView(data) {
     var container = document.getElementById('profileViewContent');
     var email = sanitizeHTML(data.email || currentUser.email || '-');
-    var displayName = data.display_name ? sanitizeHTML(data.display_name) : '<span class="empty">ยังไม่ได้ตั้ง</span>';
-    var phone = data.phone ? sanitizeHTML(data.phone) : '<span class="empty">ยังไม่ได้ตั้ง</span>';
-    var address = data.address ? sanitizeHTML(data.address) : '<span class="empty">ยังไม่ได้ตั้ง</span>';
+    var displayName = data.display_name ? sanitizeHTML(data.display_name) : '<span class="empty">Not set</span>';
+    var phone = data.phone ? sanitizeHTML(data.phone) : '<span class="empty">Not set</span>';
+    var address = data.address ? sanitizeHTML(data.address) : '<span class="empty">Not set</span>';
     var created = data.created_at ? new Date(data.created_at).toLocaleString('th-TH') : '-';
     var updated = data.updated_at ? new Date(data.updated_at).toLocaleString('th-TH') : '-';
 
@@ -1741,11 +1877,11 @@ function renderProfileView(data) {
     html += '  <span class="profile-value">' + address + '</span>';
     html += '</div>';
     html += '<div class="profile-row">';
-    html += '  <span class="profile-label">สมัครเมื่อ</span>';
+    html += '  <span class="profile-label">Registered</span>';
     html += '  <span class="profile-value" style="font-size:12px; font-family:var(--mono);">' + sanitizeHTML(created) + '</span>';
     html += '</div>';
     html += '<div class="profile-row">';
-    html += '  <span class="profile-label">อัพเดทล่าสุด</span>';
+    html += '  <span class="profile-label">Last updated</span>';
     html += '  <span class="profile-value" style="font-size:12px; font-family:var(--mono);">' + sanitizeHTML(updated) + '</span>';
     html += '</div>';
     html += '</div>';
@@ -1758,7 +1894,7 @@ function renderProfileView(data) {
 // ============================================================
 async function toggleProfileEdit(editing) {
     if (editing) {
-        // โหลดข้อมูลปัจจุบันเข้า form
+        // Load current data into form
         var { data } = await sb
             .from('profiles')
             .select('email, display_name, phone, address')
@@ -1809,13 +1945,13 @@ async function saveProfile() {
     if (error) {
         showToast('Error: ' + error.message, 'error');
     } else {
-        showToast('อัพเดท profile สำเร็จ!', 'success');
+        showToast('Profile updated!', 'success');
         toggleProfileEdit(false);
         loadProfile();
     }
 
     btn.disabled = false;
-    btn.textContent = '\uD83D\uDCBE บันทึก';
+    btn.textContent = '\uD83D\uDCBE Save';
 }
 
 // ============================================================
@@ -1824,7 +1960,7 @@ async function saveProfile() {
 async function addDevice() {
     const deviceId = document.getElementById('addDeviceId').value.trim();
     if (!deviceId) {
-        showToast('กรุณากรอก Device ID', 'error');
+        showToast('Please enter Device ID', 'error');
         return;
     }
 
@@ -1854,20 +1990,20 @@ async function addDevice() {
 
     if (error) {
         createOutput('outputAddDevice', 'err', 'Error: ' + error.code, formatTime(elapsed), error.message);
-        showToast('เพิ่ม device ไม่สำเร็จ', 'error');
+        showToast('Failed to add device', 'error');
     } else if (data && data.success === false) {
         createOutput('outputAddDevice', 'err', 'Failed', formatTime(elapsed), data);
-        showToast(data.error || 'เพิ่ม device ไม่สำเร็จ', 'error');
+        showToast(data.error || 'Failed to add device', 'error');
     } else {
         createOutput('outputAddDevice', 'ok', '200 OK', formatTime(elapsed), data);
-        showToast('เพิ่ม device สำเร็จ!', 'success');
-        // เคลียร์ฟอร์ม
+        showToast('Device added!', 'success');
+        // Clear form
         document.getElementById('addDeviceId').value = '';
         document.getElementById('addDeviceName').value = '';
         document.getElementById('addLat').value = '';
         document.getElementById('addLng').value = '';
         document.getElementById('addIsPublic').checked = false;
-        // รีโหลดรายการ
+        // Reload lists
         loadDevices();
         loadDeviceList();
     }
@@ -1877,11 +2013,11 @@ async function addDevice() {
 }
 
 // ============================================================
-// Device Management: Load Device List (ตาราง)
+// Device Management: Load Device List (table)
 // ============================================================
 async function loadDeviceList() {
     const container = document.getElementById('deviceListContainer');
-    container.innerHTML = '<p style="padding:20px; text-align:center;" class="text-dim">กำลังโหลด...</p>';
+    container.innerHTML = '<p style="padding:20px; text-align:center;" class="text-dim">Loading...</p>';
 
     const { data, error } = await sb.rpc('get_my_devices');
 
@@ -1891,11 +2027,11 @@ async function loadDeviceList() {
     }
 
     if (!data || data.length === 0) {
-        container.innerHTML = '<p style="padding:20px; text-align:center;" class="text-dim">ยังไม่มี device ลงทะเบียน</p>';
+        container.innerHTML = '<p style="padding:20px; text-align:center;" class="text-dim">No devices registered yet</p>';
         return;
     }
 
-    // สร้างตาราง
+    // Build table
     var html = '<div class="device-table-wrap"><table class="device-table">';
     html += '<thead><tr>';
     html += '<th>Device ID</th>';
@@ -1938,7 +2074,7 @@ async function loadDeviceList() {
 // Device Management: Edit Modal
 // ============================================================
 async function openEditModal(deviceId) {
-    // ดึงข้อมูล device ปัจจุบัน
+    // Fetch current device data
     if (!await ensureSession()) return; // Phase 3C
 
     const { data, error } = await sb.rpc('get_my_devices');
@@ -1946,11 +2082,11 @@ async function openEditModal(deviceId) {
 
     const device = data.find(function(d) { return d.device_id === deviceId; });
     if (!device) {
-        showToast('ไม่พบ device', 'error');
+        showToast('Device not found', 'error');
         return;
     }
 
-    // เติมข้อมูลในฟอร์ม
+    // Fill form with current data
     document.getElementById('editDeviceId').value = device.device_id || '';
     document.getElementById('editDeviceName').value = device.device_name || '';
     document.getElementById('editClientId').value = device.client_id || '';
@@ -1958,7 +2094,7 @@ async function openEditModal(deviceId) {
     document.getElementById('editLng').value = device.longitude || '';
     document.getElementById('editIsPublic').checked = device.is_public || false;
 
-    // แสดง modal
+    // Show modal
     document.getElementById('editModal').classList.add('active');
 }
 
@@ -1988,16 +2124,16 @@ async function saveDevice() {
     if (error) {
         showToast('Error: ' + error.message, 'error');
     } else if (data && data.success === false) {
-        showToast(data.error || 'อัพเดทไม่สำเร็จ', 'error');
+        showToast(data.error || 'Update failed', 'error');
     } else {
-        showToast('อัพเดท device สำเร็จ!', 'success');
+        showToast('Device updated!', 'success');
         closeEditModal();
         loadDevices();
         loadDeviceList();
     }
 
     btn.disabled = false;
-    btn.textContent = 'บันทึก';
+    btn.textContent = 'Save';
 }
 
 // ============================================================
@@ -2029,16 +2165,16 @@ async function confirmDelete() {
     if (error) {
         showToast('Error: ' + error.message, 'error');
     } else if (data && data.success === false) {
-        showToast(data.error || 'ลบไม่สำเร็จ', 'error');
+        showToast(data.error || 'Delete failed', 'error');
     } else {
-        showToast('ลบ device สำเร็จ!', 'success');
+        showToast('Device deleted!', 'success');
         closeDeleteModal();
         loadDevices();
         loadDeviceList();
     }
 
     btn.disabled = false;
-    btn.textContent = '\uD83D\uDDD1 ลบ Device';
+    btn.textContent = '\uD83D\uDDD1 Delete Device';
 }
 
 // ============================================================
