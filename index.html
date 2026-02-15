@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BE-TPP Phase 3 — API Test Console</title>
+    <title>BE-TPP Phase 3 â€” API Test Console</title>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Noto+Sans+Thai:wght@300;400;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -703,6 +703,67 @@
             margin: 24px 0;
         }
 
+        /* ===== Realtime Status ===== */
+        .rt-status {
+            margin-top: 10px;
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-family: var(--mono);
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s ease;
+        }
+        .rt-status.waiting {
+            background: var(--amber-dim);
+            border: 1px solid rgba(251, 191, 36, 0.2);
+            color: var(--amber);
+        }
+        .rt-status.received {
+            background: var(--green-dim);
+            border: 1px solid rgba(52, 211, 153, 0.2);
+            color: var(--green);
+        }
+        .rt-status .rt-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .rt-status.waiting .rt-dot {
+            background: var(--amber);
+            animation: pulse 1s infinite;
+        }
+        .rt-status.received .rt-dot {
+            background: var(--green);
+        }
+        .rt-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-family: var(--mono);
+            font-size: 11px;
+            padding: 3px 8px;
+            border-radius: 4px;
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            color: var(--text-dim);
+        }
+        .rt-badge.active {
+            background: var(--green-dim);
+            border-color: rgba(52, 211, 153, 0.2);
+            color: var(--green);
+        }
+        .rt-badge .rt-indicator {
+            width: 6px; height: 6px;
+            border-radius: 50%;
+            background: var(--text-dim);
+        }
+        .rt-badge.active .rt-indicator {
+            background: var(--green);
+            animation: pulse 2s infinite;
+        }
+
         /* ===== Responsive ===== */
         @media (max-width: 640px) {
             .container { padding: 16px; }
@@ -806,6 +867,10 @@
             <option value="">Loading devices...</option>
         </select>
         <button class="btn btn-ghost btn-sm" onclick="loadDevices()">&#8635;</button>
+        <span class="rt-badge" id="rtBadge">
+            <span class="rt-indicator"></span>
+            <span id="rtBadgeText">Realtime: OFF</span>
+        </span>
     </div>
 
     <!-- ===== API Test Cards (shown after login) ===== -->
@@ -907,6 +972,7 @@
                     <span id="speedLabel" style="font-family:var(--mono); font-size:13px; min-width:40px;">60%</span>
                 </div>
                 <div id="outputFan"></div>
+                <div id="realtimeFeedback"></div>
             </div>
         </div>
 
@@ -1178,9 +1244,11 @@ let currentUser = null;
 let currentDeviceId = '';
 let deleteTargetDeviceId = '';
 let isManualLogout = false; // Phase 3C: Distinguish session expired vs manual logout
+let realtimeChannel = null; // Phase 3A: Supabase Realtime channel
+let fanCommandPending = false; // Phase 3A: Flag to track pending fan command
 
 // ============================================================
-// Helper: sanitizeHTML — prevent XSS on all innerHTML renders
+// Helper: sanitizeHTML â€” prevent XSS on all innerHTML renders
 // ============================================================
 function sanitizeHTML(str) {
     const temp = document.createElement('div');
@@ -1233,7 +1301,7 @@ function showToast(message, type) {
 }
 
 // ============================================================
-// Phase 3C: Helper — Parse error hash from Magic Link redirect
+// Phase 3C: Helper â€” Parse error hash from Magic Link redirect
 // When Magic Link expired or rejected, Supabase redirects with error
 // #error=access_denied&error_code=otp_expired&error_description=...
 // ============================================================
@@ -1272,7 +1340,7 @@ function parseHashError() {
 }
 
 // ============================================================
-// Phase 3C: Helper — Remove hash fragment from URL
+// Phase 3C: Helper â€” Remove hash fragment from URL
 // ============================================================
 function cleanUrlHash() {
     if (window.location.hash) {
@@ -1281,7 +1349,7 @@ function cleanUrlHash() {
 }
 
 // ============================================================
-// Phase 3C: Helper — Show error banner from Magic Link
+// Phase 3C: Helper â€” Show error banner from Magic Link
 // ============================================================
 function showHashError(errorInfo) {
     var container = document.getElementById('authErrorBanner');
@@ -1307,7 +1375,7 @@ function closeAuthError() {
 
 // ============================================================
 // Phase 3C: Session expired handler
-// Separate from normal onLogout() — show session expired banner
+// Separate from normal onLogout() â€” show session expired banner
 // ============================================================
 function onSessionExpired() {
     // Run normal logout first
@@ -1329,7 +1397,7 @@ function scrollToLogin() {
 }
 
 // ============================================================
-// Phase 3C: Check session before API call — returns true if session is valid
+// Phase 3C: Check session before API call â€” returns true if session is valid
 // ============================================================
 async function ensureSession() {
     var result = await sb.auth.getSession();
@@ -1363,7 +1431,7 @@ async function checkSession() {
     if (hashError) {
         showHashError(hashError);
         cleanUrlHash();
-        // Don't return — still check session below (user might be logged in)
+        // Don't return â€” still check session below (user might be logged in)
     }
 
     // Check existing session
@@ -1393,7 +1461,7 @@ async function checkSession() {
                 onLogout();
             }
         } else if (event === 'TOKEN_REFRESHED' && session) {
-            // Token refresh success — update session info in UI
+            // Token refresh success â€” update session info in UI
             document.getElementById('sessionInfo').textContent =
                 'uid: ' + session.user.id.substring(0, 8) + '... | exp: ' + new Date(session.expires_at * 1000).toLocaleTimeString();
         }
@@ -1424,7 +1492,7 @@ async function sendMagicLink() {
     if (error) {
         showAuthMsg('Error: ' + error.message, 'red');
     } else {
-        showAuthMsg('Magic Link sent to ' + email + ' — check your inbox', 'green');
+        showAuthMsg('Magic Link sent to ' + email + ' â€” check your inbox', 'green');
     }
 
     btn.disabled = false;
@@ -1526,6 +1594,10 @@ function onLogin(session) {
 function onLogout() {
     currentUser = null;
     currentDeviceId = '';
+    // Phase 3A: Cleanup Realtime subscription
+    unsubscribeRealtime();
+    fanCommandPending = false;
+    document.getElementById('realtimeFeedback').innerHTML = '';
     document.getElementById('loginView').classList.remove('hidden');
     document.getElementById('loggedInView').classList.add('hidden');
     document.getElementById('authCard').classList.remove('logged-in');
@@ -1569,10 +1641,21 @@ async function loadDevices() {
     }).join('');
 
     currentDeviceId = data[0].device_id;
+    // Phase 3A: Subscribe Realtime for first device
+    subscribeRealtime(currentDeviceId);
 }
 
 function onDeviceChange() {
     currentDeviceId = document.getElementById('deviceSelect').value;
+    // Phase 3A: Re-subscribe Realtime for new device
+    if (currentDeviceId) {
+        subscribeRealtime(currentDeviceId);
+    } else {
+        unsubscribeRealtime();
+    }
+    // Clear previous realtime feedback
+    document.getElementById('realtimeFeedback').innerHTML = '';
+    fanCommandPending = false;
 }
 
 // ============================================================
@@ -1705,6 +1788,11 @@ async function testFanControl() {
 
         if (res.ok) {
             createOutput('outputFan', 'ok', res.status + ' OK', formatTime(elapsed), body);
+            // Phase 3A: Mark pending + show waiting for device feedback
+            fanCommandPending = true;
+            showRealtimeFeedback('waiting',
+                '\u2714 Command sent \u2014 waiting for device feedback...',
+                'Expected: ~2.5\u20133 seconds');
         } else {
             createOutput('outputFan', 'err', res.status + ' Error', formatTime(elapsed), body);
         }
@@ -1822,6 +1910,139 @@ function onFanCommandChange() {
 
 function updateSpeedLabel() {
     document.getElementById('speedLabel').textContent = document.getElementById('fanSpeedValue').value + '%';
+}
+
+// ============================================================
+// Phase 3A: Realtime Subscribe to device_status
+// Subscribe to INSERT events on device_status filtered by device_id
+// ============================================================
+function subscribeRealtime(deviceId) {
+    // Unsubscribe existing channel first
+    unsubscribeRealtime();
+
+    if (!deviceId) return;
+
+    // Create channel with unique name per device
+    realtimeChannel = sb.channel('device-status-' + deviceId)
+        .on(
+            'postgres_changes',
+            {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'device_status',
+                filter: 'device_id=eq.' + deviceId
+            },
+            function(payload) {
+                onRealtimeStatus(payload.new);
+            }
+        )
+        .subscribe(function(status) {
+            updateRtBadge(status === 'SUBSCRIBED');
+            if (status === 'SUBSCRIBED') {
+                console.log('[Realtime] Subscribed to device_status for:', deviceId);
+            } else if (status === 'CHANNEL_ERROR') {
+                console.warn('[Realtime] Channel error for:', deviceId);
+                updateRtBadge(false);
+            }
+        });
+}
+
+// ============================================================
+// Phase 3A: Unsubscribe Realtime channel
+// ============================================================
+function unsubscribeRealtime() {
+    if (realtimeChannel) {
+        sb.removeChannel(realtimeChannel);
+        realtimeChannel = null;
+        console.log('[Realtime] Unsubscribed');
+    }
+    updateRtBadge(false);
+}
+
+// ============================================================
+// Phase 3A: Update Realtime badge in device bar
+// ============================================================
+function updateRtBadge(isActive) {
+    var badge = document.getElementById('rtBadge');
+    var text = document.getElementById('rtBadgeText');
+    if (isActive) {
+        badge.classList.add('active');
+        text.textContent = 'Realtime: ON';
+    } else {
+        badge.classList.remove('active');
+        text.textContent = 'Realtime: OFF';
+    }
+}
+
+// ============================================================
+// Phase 3A: Handle incoming Realtime status update
+// Called when a new row is INSERTed into device_status for current device
+// ============================================================
+function onRealtimeStatus(row) {
+    console.log('[Realtime] New status:', row);
+
+    // Only process if it matches current device
+    if (row.device_id !== currentDeviceId) return;
+
+    // Build feedback info from the new row
+    var parts = [];
+    if (row.fan_speed !== null && row.fan_speed !== undefined) {
+        parts.push('Fan Speed: ' + row.fan_speed + '%');
+    }
+    if (row.fan_mode !== null && row.fan_mode !== undefined) {
+        parts.push('Fan Mode: ' + row.fan_mode);
+    }
+    if (row.fan_state !== null && row.fan_state !== undefined) {
+        parts.push('Fan State: ' + row.fan_state);
+    }
+    if (row.fw_ver) {
+        parts.push('FW: ' + row.fw_ver);
+    }
+    if (row.rssi !== null && row.rssi !== undefined) {
+        parts.push('RSSI: ' + row.rssi + ' dBm');
+    }
+
+    var timestamp = row.time ? new Date(row.time).toLocaleTimeString() : 'now';
+    var infoText = parts.length > 0 ? parts.join(' | ') : 'Status updated (no fan fields in this row)';
+
+    // If we have a pending fan command, show confirmation
+    if (fanCommandPending) {
+        fanCommandPending = false;
+        showRealtimeFeedback('received',
+            '\u2714 Device confirmed at ' + timestamp,
+            infoText);
+    } else {
+        // Background update (e.g. ESP32 periodic status)
+        showRealtimeFeedback('received',
+            '\u21BB Status update at ' + timestamp,
+            infoText);
+    }
+
+    // Auto-clear feedback after 15 seconds
+    setTimeout(function() {
+        var el = document.getElementById('realtimeFeedback');
+        if (el && el.querySelector('.rt-status.received')) {
+            el.innerHTML = '';
+        }
+    }, 15000);
+}
+
+// ============================================================
+// Phase 3A: Show Realtime feedback in fan_control card
+// ============================================================
+function showRealtimeFeedback(status, title, detail) {
+    var container = document.getElementById('realtimeFeedback');
+    var safeTitle = sanitizeHTML(title);
+    var safeDetail = sanitizeHTML(detail || '');
+
+    container.innerHTML =
+        '<div class="rt-status ' + status + '">' +
+            '<div class="rt-dot"></div>' +
+            '<div>' +
+                '<div style="font-weight:600;">' + safeTitle + '</div>' +
+                (safeDetail ? '<div style="opacity:0.8; margin-top:2px;">' + safeDetail + '</div>' : '') +
+            '</div>' +
+        '</div>';
 }
 
 // ============================================================
