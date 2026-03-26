@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BE-TPP Phase 3 â€” API Test Console</title>
+    <title>BE-TPP Phase 3 — API Test Console</title>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Noto+Sans+Thai:wght@300;400;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -1248,7 +1248,7 @@ let realtimeChannel = null; // Phase 3A: Supabase Realtime channel
 let fanCommandPending = false; // Phase 3A: Flag to track pending fan command
 
 // ============================================================
-// Helper: sanitizeHTML â€” prevent XSS on all innerHTML renders
+// Helper: sanitizeHTML — prevent XSS on all innerHTML renders
 // ============================================================
 function sanitizeHTML(str) {
     const temp = document.createElement('div');
@@ -1301,7 +1301,7 @@ function showToast(message, type) {
 }
 
 // ============================================================
-// Phase 3C: Helper â€” Parse error hash from Magic Link redirect
+// Phase 3C: Helper — Parse error hash from Magic Link redirect
 // When Magic Link expired or rejected, Supabase redirects with error
 // #error=access_denied&error_code=otp_expired&error_description=...
 // ============================================================
@@ -1340,7 +1340,7 @@ function parseHashError() {
 }
 
 // ============================================================
-// Phase 3C: Helper â€” Remove hash fragment from URL
+// Phase 3C: Helper — Remove hash fragment from URL
 // ============================================================
 function cleanUrlHash() {
     if (window.location.hash) {
@@ -1349,7 +1349,7 @@ function cleanUrlHash() {
 }
 
 // ============================================================
-// Phase 3C: Helper â€” Show error banner from Magic Link
+// Phase 3C: Helper — Show error banner from Magic Link
 // ============================================================
 function showHashError(errorInfo) {
     var container = document.getElementById('authErrorBanner');
@@ -1375,7 +1375,7 @@ function closeAuthError() {
 
 // ============================================================
 // Phase 3C: Session expired handler
-// Separate from normal onLogout() â€” show session expired banner
+// Separate from normal onLogout() — show session expired banner
 // ============================================================
 function onSessionExpired() {
     // Run normal logout first
@@ -1397,7 +1397,7 @@ function scrollToLogin() {
 }
 
 // ============================================================
-// Phase 3C: Check session before API call â€” returns true if session is valid
+// Phase 3C: Check session before API call — returns true if session is valid
 // ============================================================
 async function ensureSession() {
     var result = await sb.auth.getSession();
@@ -1431,7 +1431,7 @@ async function checkSession() {
     if (hashError) {
         showHashError(hashError);
         cleanUrlHash();
-        // Don't return â€” still check session below (user might be logged in)
+        // Don't return — still check session below (user might be logged in)
     }
 
     // Check existing session
@@ -1461,7 +1461,7 @@ async function checkSession() {
                 onLogout();
             }
         } else if (event === 'TOKEN_REFRESHED' && session) {
-            // Token refresh success â€” update session info in UI
+            // Token refresh success — update session info in UI
             document.getElementById('sessionInfo').textContent =
                 'uid: ' + session.user.id.substring(0, 8) + '... | exp: ' + new Date(session.expires_at * 1000).toLocaleTimeString();
         }
@@ -1492,7 +1492,7 @@ async function sendMagicLink() {
     if (error) {
         showAuthMsg('Error: ' + error.message, 'red');
     } else {
-        showAuthMsg('Magic Link sent to ' + email + ' â€” check your inbox', 'green');
+        showAuthMsg('Magic Link sent to ' + email + ' — check your inbox', 'green');
     }
 
     btn.disabled = false;
