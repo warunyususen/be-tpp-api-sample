@@ -1089,6 +1089,38 @@
                 <p>Get all devices with lat/lng + latest sensor. Public devices get extra info (Phase 3D)</p>
                 <div id="outputPublicAirQuality"></div>
             </div>
+        </div>
+
+        <!-- Card 9: get-outdoor-air Edge Function (Phase 3E R4) -->
+        <div class="api-card">
+            <div class="api-card-header">
+                <h3>
+                    <span class="method-badge method-edge">EDGE</span>
+                    get-outdoor-air
+                </h3>
+                <button class="btn btn-primary btn-sm" onclick="testOutdoorAir()" id="btnOutdoorAir">
+                    &#9654; Run
+                </button>
+            </div>
+            <div class="api-card-body">
+                <p>Get outdoor air quality from AQICN via Edge Function (Proxy + Geo Zone Cache 1hr)</p>
+                <div class="param-row">
+                    <span class="param-label">mode</span>
+                    <select class="param-input" id="outdoorAirMode" onchange="onOutdoorAirModeChange()">
+                        <option value="device" selected>Use active device location</option>
+                        <option value="custom">Custom lat/lng</option>
+                    </select>
+                </div>
+                <div class="param-row hidden" id="outdoorLatRow">
+                    <span class="param-label">latitude</span>
+                    <input type="number" class="param-input" id="outdoorLat" placeholder="e.g. 17.4138" step="0.0001" />
+                </div>
+                <div class="param-row hidden" id="outdoorLngRow">
+                    <span class="param-label">longitude</span>
+                    <input type="number" class="param-input" id="outdoorLng" placeholder="e.g. 102.7874" step="0.0001" />
+                </div>
+                <div id="outputOutdoorAir"></div>
+            </div>
         </div>    </div>
 
     <!-- ===== Section: Profile Management (shown after login) ===== -->
@@ -2050,6 +2082,103 @@ async function testPublicAirQuality() {
     }
 
     createOutput('outputPublicAirQuality', 'ok', '200 OK \u2014 ' + (data ? data.length : 0) + ' devices', formatTime(elapsed), data);
+}
+
+// ============================================================
+// Test 9: get-outdoor-air Edge Function (Phase 3E R4)
+// ============================================================
+function getAqiInfo(aqi) {
+    if (aqi == null) return { level: 'N/A', color: 'var(--text-dim)' };
+    if (aqi <= 50) return { level: 'Good', color: '#34d399' };
+    if (aqi <= 100) return { level: 'Moderate', color: '#fbbf24' };
+    if (aqi <= 150) return { level: 'Unhealthy for Sensitive', color: '#fb923c' };
+    if (aqi <= 200) return { level: 'Unhealthy', color: '#f87171' };
+    if (aqi <= 300) return { level: 'Very Unhealthy', color: '#a855f7' };
+    return { level: 'Hazardous', color: '#991b1b' };
+}
+
+function onOutdoorAirModeChange() {
+    var mode = document.getElementById('outdoorAirMode').value;
+    document.getElementById('outdoorLatRow').classList.toggle('hidden', mode !== 'custom');
+    document.getElementById('outdoorLngRow').classList.toggle('hidden', mode !== 'custom');
+}
+
+async function testOutdoorAir() {
+    if (!await ensureSession()) return;
+    showLoading('outputOutdoorAir');
+    var start = performance.now();
+
+    var { data: { session } } = await sb.auth.getSession();
+    if (!session) {
+        createOutput('outputOutdoorAir', 'err', 'Auth Error', '0ms', 'No active session');
+        return;
+    }
+
+    // สร้าง request body ตาม mode
+    var mode = document.getElementById('outdoorAirMode').value;
+    var body = {};
+
+    if (mode === 'device') {
+        if (!currentDeviceId) {
+            createOutput('outputOutdoorAir', 'err', 'Error', '0ms', 'Please select a device first');
+            return;
+        }
+        body = { device_id: currentDeviceId };
+    } else {
+        var lat = parseFloat(document.getElementById('outdoorLat').value);
+        var lng = parseFloat(document.getElementById('outdoorLng').value);
+        if (isNaN(lat) || isNaN(lng)) {
+            createOutput('outputOutdoorAir', 'err', 'Error', '0ms', 'Please enter valid latitude and longitude');
+            return;
+        }
+        body = { latitude: lat, longitude: lng };
+    }
+
+    try {
+        var res = await fetch(SUPABASE_URL + '/functions/v1/get-outdoor-air', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + session.access_token,
+            },
+            body: JSON.stringify(body),
+        });
+
+        var elapsed = Math.round(performance.now() - start);
+        var result = await res.json();
+
+        if (res.ok && result.success) {
+            var d = result.data;
+            var aqiInfo = getAqiInfo(d.aqi);
+
+            // สร้าง summary object สำหรับแสดงผล
+            var summary = {
+                aqi: d.aqi + ' (' + aqiInfo.level + ')',
+                pm25: d.pm25 != null ? d.pm25 + ' ug/m3' : 'N/A',
+                pm10: d.pm10 != null ? d.pm10 + ' ug/m3' : 'N/A',
+                dominant_pollutant: d.dominant_pollutant || 'N/A',
+                station: d.station_name || 'Unknown',
+                station_url: d.station_url || '',
+                temperature: d.temperature != null ? d.temperature + ' C' : 'N/A',
+                humidity: d.humidity != null ? d.humidity + '%' : 'N/A',
+                wind: d.wind != null ? d.wind + ' m/s' : 'N/A',
+                source: result.source + (result.cache_age_minutes > 0 ? ' (' + result.cache_age_minutes + ' min ago)' : ' (fresh)'),
+                geo_zone: result.geo_zone,
+                device_id: result.device_id || 'N/A',
+                device_name: result.device_name || 'N/A',
+                db_synced: result.db_synced != null ? result.db_synced : 'N/A',
+            };
+
+            var statusText = '200 OK \u2014 AQI ' + d.aqi + ' (' + aqiInfo.level + ')';
+            createOutput('outputOutdoorAir', 'ok', statusText, formatTime(elapsed), summary);
+        } else {
+            createOutput('outputOutdoorAir', 'err', res.status + ' Error', formatTime(elapsed), result);
+        }
+    } catch (err) {
+        var elapsed = Math.round(performance.now() - start);
+        createOutput('outputOutdoorAir', 'err', 'Network Error', formatTime(elapsed),
+            'Edge Function not deployed yet or URL is incorrect\n\n' + err.message);
+    }
 }
 // ============================================================
 // UI Helpers (Fan Control)
