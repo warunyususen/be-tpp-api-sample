@@ -822,7 +822,7 @@
             <!-- Method 2: Email OTP (Phase 3E) -->
             <p class="text-sm" style="color:var(--green); font-weight:600; margin-bottom:6px;">Method 2: Email OTP</p>
             <p class="text-sm text-dim" style="margin-bottom:8px;">
-                Enter email &#8594; receive 6-digit code &#8594; verify to login (recommended for mobile app)
+                Enter email &#8594; receive OTP code &#8594; verify to login (recommended for mobile app)
             </p>
             <!-- Step 1: Send OTP -->
             <div id="otpStep1">
@@ -837,8 +837,8 @@
             <div id="otpStep2" class="hidden">
                 <p class="text-sm" style="color:var(--green); margin-bottom:8px;" id="otpSentMsg"></p>
                 <div class="auth-form">
-                    <input type="text" id="otpCodeInput" placeholder="Enter 6-digit code" maxlength="6"
-                           style="font-family:var(--mono); font-size:18px; letter-spacing:6px; text-align:center; max-width:200px;" />
+                    <input type="text" id="otpCodeInput" placeholder="OTP code" maxlength="10"
+                           style="font-family:var(--mono); font-size:16px; letter-spacing:4px; text-align:center; min-width:180px;" />
                     <button class="btn btn-primary" id="btnVerifyOtp" onclick="verifyOtp()" style="background:var(--green); border-color:var(--green);">
                         Verify
                     </button>
@@ -1592,7 +1592,7 @@ async function sendOtp() {
 async function verifyOtp() {
     var code = document.getElementById('otpCodeInput').value.trim();
     if (!code || code.length < 6) {
-        showOtpMsg('Please enter the 6-digit code', 'red');
+        showOtpMsg('Please enter the OTP code from your email', 'red');
         return;
     }
 
