@@ -795,7 +795,7 @@
     <!-- ===== Section 1: Authentication ===== -->
     <div class="auth-card" id="authCard">
         <span class="section-tag tag-auth">&#9312; Authentication</span>
-        <h2 style="font-size:18px; margin-bottom:4px;">Supabase Magic Link</h2>
+        <h2 style="font-size:18px; margin-bottom:4px;">Supabase Authentication</h2>
         <p class="text-sm text-dim">Login with email to get a session token for API calls</p>
 
         <!-- Login Form -->
@@ -819,8 +819,45 @@
                 <div style="flex:1; height:1px; background:var(--border);"></div>
             </div>
 
-            <!-- Method 2: Paste Token -->
-            <p class="text-sm" style="color:var(--amber); font-weight:600; margin-bottom:6px;">Method 2: Paste Token (for local file)</p>
+            <!-- Method 2: Email OTP (Phase 3E) -->
+            <p class="text-sm" style="color:var(--green); font-weight:600; margin-bottom:6px;">Method 2: Email OTP</p>
+            <p class="text-sm text-dim" style="margin-bottom:8px;">
+                Enter email &#8594; receive 6-digit code &#8594; verify to login (recommended for mobile app)
+            </p>
+            <!-- Step 1: Send OTP -->
+            <div id="otpStep1">
+                <div class="auth-form">
+                    <input type="email" id="otpEmailInput" placeholder="your@email.com" />
+                    <button class="btn btn-primary" id="btnSendOtp" onclick="sendOtp()" style="background:var(--green); border-color:var(--green);">
+                        Send OTP
+                    </button>
+                </div>
+            </div>
+            <!-- Step 2: Verify OTP (hidden until OTP sent) -->
+            <div id="otpStep2" class="hidden">
+                <p class="text-sm" style="color:var(--green); margin-bottom:8px;" id="otpSentMsg"></p>
+                <div class="auth-form">
+                    <input type="text" id="otpCodeInput" placeholder="Enter 6-digit code" maxlength="6"
+                           style="font-family:var(--mono); font-size:18px; letter-spacing:6px; text-align:center; max-width:200px;" />
+                    <button class="btn btn-primary" id="btnVerifyOtp" onclick="verifyOtp()" style="background:var(--green); border-color:var(--green);">
+                        Verify
+                    </button>
+                    <button class="btn btn-ghost btn-sm" onclick="resetOtp()" style="font-size:12px;">
+                        &#8635; Resend
+                    </button>
+                </div>
+            </div>
+            <p id="otpMsg" class="text-sm mt-4" style="display:none;"></p>
+
+            <!-- Divider -->
+            <div style="display:flex; align-items:center; gap:12px; margin:20px 0;">
+                <div style="flex:1; height:1px; background:var(--border);"></div>
+                <span class="text-sm text-dim">or</span>
+                <div style="flex:1; height:1px; background:var(--border);"></div>
+            </div>
+
+            <!-- Method 3: Paste Token (for local file) -->
+            <p class="text-sm" style="color:var(--amber); font-weight:600; margin-bottom:6px;">Method 3: Paste Token (for local file)</p>
             <p class="text-sm text-dim" style="margin-bottom:8px;">
                 After clicking Magic Link &#8594; copy <code style="color:var(--accent);">access_token=...</code> from redirect URL &#8594; paste below
             </p>
@@ -1503,6 +1540,121 @@ function showAuthMsg(msg, color) {
     const el = document.getElementById('authMsg');
     el.style.display = 'block';
     el.style.color = color === 'green' ? 'var(--green)' : 'var(--red)';
+    el.textContent = msg;
+}
+
+// ============================================================
+// Auth: Email OTP — Send OTP code (Phase 3E)
+// ============================================================
+var otpEmail = ''; // Store email for verify step
+
+async function sendOtp() {
+    var email = document.getElementById('otpEmailInput').value.trim();
+    if (!email) {
+        showOtpMsg('Please enter your email', 'red');
+        return;
+    }
+
+    var btn = document.getElementById('btnSendOtp');
+    btn.disabled = true;
+    btn.textContent = 'Sending...';
+
+    var result = await sb.auth.signInWithOtp({
+        email: email,
+        options: {
+            shouldCreateUser: false
+        }
+    });
+
+    if (result.error) {
+        showOtpMsg('Error: ' + result.error.message, 'red');
+        btn.disabled = false;
+        btn.textContent = 'Send OTP';
+        return;
+    }
+
+    // OTP sent successfully — show verify step
+    otpEmail = email;
+    document.getElementById('otpStep1').classList.add('hidden');
+    document.getElementById('otpStep2').classList.remove('hidden');
+    document.getElementById('otpSentMsg').textContent = 'OTP sent to ' + email + ' — check your inbox';
+    document.getElementById('otpCodeInput').value = '';
+    document.getElementById('otpCodeInput').focus();
+    showOtpMsg('', '');
+
+    btn.disabled = false;
+    btn.textContent = 'Send OTP';
+}
+
+// ============================================================
+// Auth: Email OTP — Verify OTP code (Phase 3E)
+// ============================================================
+async function verifyOtp() {
+    var code = document.getElementById('otpCodeInput').value.trim();
+    if (!code || code.length < 6) {
+        showOtpMsg('Please enter the 6-digit code', 'red');
+        return;
+    }
+
+    if (!otpEmail) {
+        showOtpMsg('Email not found. Please resend OTP.', 'red');
+        return;
+    }
+
+    var btn = document.getElementById('btnVerifyOtp');
+    btn.disabled = true;
+    btn.textContent = 'Verifying...';
+    showOtpMsg('Verifying OTP...', 'amber');
+
+    try {
+        var result = await sb.auth.verifyOtp({
+            email: otpEmail,
+            token: code,
+            type: 'email'
+        });
+
+        if (result.error) {
+            showOtpMsg('Error: ' + result.error.message, 'red');
+            btn.disabled = false;
+            btn.textContent = 'Verify';
+            return;
+        }
+
+        if (result.data && result.data.session) {
+            showOtpMsg('Login successful!', 'green');
+            onLogin(result.data.session);
+        } else {
+            showOtpMsg('Invalid or expired OTP code', 'red');
+        }
+    } catch (err) {
+        showOtpMsg('Error: ' + err.message, 'red');
+    }
+
+    btn.disabled = false;
+    btn.textContent = 'Verify';
+}
+
+// ============================================================
+// Auth: Email OTP — Reset to step 1 (resend)
+// ============================================================
+function resetOtp() {
+    document.getElementById('otpStep1').classList.remove('hidden');
+    document.getElementById('otpStep2').classList.add('hidden');
+    showOtpMsg('', '');
+    // Pre-fill email from previous attempt
+    if (otpEmail) {
+        document.getElementById('otpEmailInput').value = otpEmail;
+    }
+}
+
+function showOtpMsg(msg, color) {
+    var el = document.getElementById('otpMsg');
+    if (!msg) {
+        el.style.display = 'none';
+        return;
+    }
+    el.style.display = 'block';
+    el.style.color = color === 'green' ? 'var(--green)' : color === 'amber' ? 'var(--amber)' : 'var(--red)';
     el.textContent = msg;
 }
 
