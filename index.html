@@ -1074,7 +1074,7 @@
             </div>
         </div>
 
-        <!-- Card 8: get_public_air_quality (Phase 3D) -->
+        <!-- Card 8: get_public_air_quality (Phase 3D + 3F: เพิ่ม public_only filter) -->
         <div class="api-card">
             <div class="api-card-header">
                 <h3>
@@ -1087,6 +1087,10 @@
             </div>
             <div class="api-card-body">
                 <p>Get all devices with lat/lng + latest sensor. Public devices get extra info (Phase 3D)</p>
+                <div class="checkbox-row" style="padding-top:8px;">
+                    <input type="checkbox" id="publicAirPublicOnly" checked />
+                    <label for="publicAirPublicOnly">public_only (show only is_public=true devices)</label>
+                </div>
                 <div id="outputPublicAirQuality"></div>
             </div>
         </div>
@@ -1120,6 +1124,34 @@
                     <input type="number" class="param-input" id="outdoorLng" placeholder="e.g. 102.7874" step="0.0001" />
                 </div>
                 <div id="outputOutdoorAir"></div>
+            </div>
+        </div>
+
+        <!-- Card 10: get-outdoor-air-batch Edge Function (Phase 3F) -->
+        <div class="api-card">
+            <div class="api-card-header">
+                <h3>
+                    <span class="method-badge method-edge">EDGE</span>
+                    get-outdoor-air-batch
+                </h3>
+                <button class="btn btn-primary btn-sm" onclick="testOutdoorAirBatch()" id="btnOutdoorAirBatch">
+                    &#9654; Run
+                </button>
+            </div>
+            <div class="api-card-body">
+                <p>Batch outdoor AQI for multiple devices via AQICN (Geo Zone Dedup + Cache 1hr) (Phase 3F)</p>
+                <div class="param-row">
+                    <span class="param-label">source</span>
+                    <select class="param-input" id="batchAirSource" onchange="onBatchAirSourceChange()">
+                        <option value="my_devices" selected>my_devices (devices ของฉัน)</option>
+                        <option value="public">public (ทุก device ที่มี lat/lng)</option>
+                    </select>
+                </div>
+                <div class="checkbox-row" style="padding-top:8px; display:none;" id="batchPublicOnlyRow">
+                    <input type="checkbox" id="batchPublicOnly" checked />
+                    <label for="batchPublicOnly">public_only (filter เฉพาะ is_public=true)</label>
+                </div>
+                <div id="outputOutdoorAirBatch"></div>
             </div>
         </div>    </div>
 
@@ -2065,14 +2097,17 @@ async function testAirQualityMap() {
 }
 
 // ============================================================
-// Test 8: get_public_air_quality (Phase 3D)
+// Test 8: get_public_air_quality (Phase 3D + 3F: เพิ่ม public_only filter)
 // ============================================================
 async function testPublicAirQuality() {
     if (!await ensureSession()) return;
     showLoading('outputPublicAirQuality');
     const start = performance.now();
 
-    const { data, error } = await sb.rpc('get_public_air_quality');
+    var publicOnly = document.getElementById('publicAirPublicOnly').checked;
+    const { data, error } = await sb.rpc('get_public_air_quality', {
+        p_public_only: publicOnly
+    });
 
     const elapsed = Math.round(performance.now() - start);
 
@@ -2081,7 +2116,8 @@ async function testPublicAirQuality() {
         return;
     }
 
-    createOutput('outputPublicAirQuality', 'ok', '200 OK \u2014 ' + (data ? data.length : 0) + ' devices', formatTime(elapsed), data);
+    var label = publicOnly ? 'public only' : 'all devices';
+    createOutput('outputPublicAirQuality', 'ok', '200 OK \u2014 ' + (data ? data.length : 0) + ' devices (' + label + ')', formatTime(elapsed), data);
 }
 
 // ============================================================
@@ -2177,6 +2213,91 @@ async function testOutdoorAir() {
     } catch (err) {
         var elapsed = Math.round(performance.now() - start);
         createOutput('outputOutdoorAir', 'err', 'Network Error', formatTime(elapsed),
+            'Edge Function not deployed yet or URL is incorrect\n\n' + err.message);
+    }
+}
+// ============================================================
+// Test 10: get-outdoor-air-batch Edge Function (Phase 3F)
+// ============================================================
+function onBatchAirSourceChange() {
+    var source = document.getElementById('batchAirSource').value;
+    // แสดง public_only checkbox เฉพาะ mode "public"
+    var row = document.getElementById('batchPublicOnlyRow');
+    if (source === 'public') {
+        row.style.display = 'flex';
+    } else {
+        row.style.display = 'none';
+    }
+}
+
+async function testOutdoorAirBatch() {
+    if (!await ensureSession()) return;
+    showLoading('outputOutdoorAirBatch');
+    var start = performance.now();
+
+    var { data: { session } } = await sb.auth.getSession();
+    if (!session) {
+        createOutput('outputOutdoorAirBatch', 'err', 'Auth Error', '0ms', 'No active session');
+        return;
+    }
+
+    var source = document.getElementById('batchAirSource').value;
+    var body = { source: source };
+
+    // เพิ่ม public_only เฉพาะ mode "public"
+    if (source === 'public') {
+        body.public_only = document.getElementById('batchPublicOnly').checked;
+    }
+
+    try {
+        var res = await fetch(SUPABASE_URL + '/functions/v1/get-outdoor-air-batch', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + session.access_token,
+            },
+            body: JSON.stringify(body),
+        });
+
+        var elapsed = Math.round(performance.now() - start);
+        var result = await res.json();
+
+        if (res.ok && result.success) {
+            // สร้าง summary แสดงภาพรวม
+            var summary = {
+                source: result.source,
+                public_only: result.public_only,
+                total_devices: result.total_devices,
+                total_zones: result.total_zones,
+                cache_hits: result.summary.cache_hits,
+                api_calls: result.summary.api_calls,
+                errors: result.summary.errors,
+            };
+
+            // เพิ่ม device list สรุปสั้นๆ
+            if (result.results && result.results.length > 0) {
+                summary.devices = result.results.map(function(r) {
+                    var aqiInfo = getAqiInfo(r.data ? r.data.aqi : null);
+                    return {
+                        device_id: r.device_id,
+                        device_name: r.device_name,
+                        is_public: r.is_public,
+                        geo_zone: r.geo_zone,
+                        aqi: r.data && r.data.aqi != null ? r.data.aqi + ' (' + aqiInfo.level + ')' : 'N/A',
+                        source: r.source || 'N/A',
+                        error: r.error || null,
+                    };
+                });
+            }
+
+            var statusText = '200 OK \u2014 ' + result.total_devices + ' devices, ' + result.total_zones + ' zones';
+            createOutput('outputOutdoorAirBatch', 'ok', statusText, formatTime(elapsed), summary);
+        } else {
+            createOutput('outputOutdoorAirBatch', 'err', res.status + ' Error', formatTime(elapsed), result);
+        }
+    } catch (err) {
+        var elapsed = Math.round(performance.now() - start);
+        createOutput('outputOutdoorAirBatch', 'err', 'Network Error', formatTime(elapsed),
             'Edge Function not deployed yet or URL is incorrect\n\n' + err.message);
     }
 }
