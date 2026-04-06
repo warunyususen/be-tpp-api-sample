@@ -1,7 +1,7 @@
 # BE-TPP API Documentation
 
-**Version:** 1.1
-**Last Updated:** 15 February 2026
+**Version:** 1.3
+**Last Updated:** 6 April 2026
 **Project:** BE-TPP IoT (Breatheeasy Total Positive Pressure)
 
 ---
@@ -31,10 +31,13 @@
 9. [API Functions  --  Profile Management](#9-api-functions--profile-management)
    - 9.1 [Get Profile](#91-get-profile)
    - 9.2 [Update Profile](#92-update-profile)
-10. [Database Schema](#10-database-schema)
-11. [RLS Policies Summary](#11-rls-policies-summary)
-12. [Error Reference](#12-error-reference)
-13. [Rate Limits & Constraints](#13-rate-limits--constraints)
+10. [API Functions  --  Outdoor Air Quality](#10-api-functions--outdoor-air-quality)
+    - 10.1 [get-outdoor-air (Edge Function)](#101-get-outdoor-air-edge-function)
+    - 10.2 [get-outdoor-air-batch (Edge Function)](#102-get-outdoor-air-batch-edge-function)
+11. [Database Schema](#11-database-schema)
+12. [RLS Policies Summary](#12-rls-policies-summary)
+13. [Error Reference](#13-error-reference)
+14. [Rate Limits & Constraints](#14-rate-limits--constraints)
 
 ---
 
@@ -51,9 +54,13 @@ ESP32 Devices --MQTT--> EMQX Cloud --REST--> Supabase PostgreSQL
                                               |  RPC API   |
                                               |  Auth API  |
                                               |  Realtime  |
+                                              |  Edge Fn   |
                                               +-----+-----+
                                                     |
-                                              Web Dashboard
+                                    +---------------+---------------+
+                                    |                               |
+                              Web Dashboard                   AQICN API
+                                                        (Outdoor Air Quality)
 ```
 
 ### Tech Stack
@@ -63,8 +70,9 @@ ESP32 Devices --MQTT--> EMQX Cloud --REST--> Supabase PostgreSQL
 | Microcontroller | ESP32 (firmware v1.8.2)             |
 | MQTT Broker     | EMQX Cloud (Serverless)             |
 | Database        | Supabase (PostgreSQL)               |
-| Authentication  | Supabase Auth (Magic Link)          |
+| Authentication  | Supabase Auth (Magic Link + Email OTP) |
 | Edge Functions  | Supabase Edge Functions (Deno)      |
+| Outdoor Air     | AQICN API (via Edge Function proxy) |
 | Hosting         | GitHub Pages (test console)         |
 | Email           | Resend (noreply@be-tpp.com)         |
 
@@ -82,6 +90,7 @@ ESP32 Devices --MQTT--> EMQX Cloud --REST--> Supabase PostgreSQL
 - **Sensor data**: ESP32 publishes every 10 seconds -> EMQX samples every 5 minutes -> Supabase INSERT
 - **Device status**: ESP32 publishes every 30 seconds -> EMQX samples every 5 minutes -> Supabase INSERT
 - **Fan control**: Web App -> Edge Function -> MQTT publish to EMQX + INSERT to `device_status` -> Realtime notification
+- **Outdoor air quality**: Web/Mobile App -> Edge Function (`get-outdoor-air`) -> AQICN API (cache 1 hr in `outdoor_air_readings`)
 - **Data retention**: 180 days (automated via `pg_cron`)
 - **Deduplication**: `time_bucket` column with UPSERT prevents duplicate entries
 
@@ -89,7 +98,14 @@ ESP32 Devices --MQTT--> EMQX Cloud --REST--> Supabase PostgreSQL
 
 ## 2. Authentication
 
-BE-TPP uses **Supabase Auth with Magic Link** (passwordless email authentication).
+BE-TPP uses **Supabase Auth** with passwordless email authentication. Two methods are available:
+
+| Method | Use Case | Flow |
+|--------|----------|------|
+| Magic Link | Web app (click link in email) | Email → click link → redirect back with token |
+| Email OTP | Mobile app / test console | Email → enter OTP code → verify in app |
+
+Both methods use `noreply@be-tpp.com` as the sender. The email contains both a Magic Link and an OTP code.
 
 ### Magic Link Flow
 
@@ -108,6 +124,35 @@ const { error } = await supabase.auth.signInWithOtp({
     emailRedirectTo: 'https://your-app.com/callback'
   }
 });
+```
+
+### Email OTP Flow (Phase 3E)
+
+1. User submits their email address.
+2. Supabase sends an email with an OTP code (6 digits).
+3. User enters the OTP code in the app.
+4. App calls `verifyOtp()` to exchange the code for a session.
+
+### Login (Send OTP)
+
+```javascript
+const { error } = await supabase.auth.signInWithOtp({
+  email: 'user@example.com',
+  options: {
+    shouldCreateUser: false  // Do not create new users via OTP
+  }
+});
+```
+
+### Verify OTP
+
+```javascript
+const { data, error } = await supabase.auth.verifyOtp({
+  email: 'user@example.com',
+  token: '17777512',   // 8-digit OTP code from email
+  type: 'email'
+});
+// data.session contains the access token on success
 ```
 
 ### Session Token
@@ -572,12 +617,13 @@ const { data, error } = await supabase.rpc('get_my_devices');
 
 ### 6.2 register_device
 
-Registers a new IoT device to the authenticated user's account. Each device can only be registered to one user at a time.
+Registers a new IoT device to the authenticated user's account. A device can be shared by up to **3 users** (Phase 3E).
 
 | Property        | Value                          |
 |-----------------|--------------------------------|
 | **Type**        | PostgreSQL RPC Function         |
 | **Auth**        | Required (authenticated user)   |
+| **Sharing**     | Max 3 users per device          |
 
 #### Parameters
 
@@ -607,9 +653,19 @@ const { data, error } = await supabase.rpc('register_device', {
 {
   "success": true,
   "device_id": "582D34712B99",
-  "message": "Device registered successfully"
+  "message": "Device registered successfully",
+  "shared_users": 2
 }
 ```
+
+#### Response Fields
+
+| Field          | Type    | Description                                      |
+|----------------|---------|--------------------------------------------------|
+| `success`      | BOOLEAN | `true` on success                                |
+| `device_id`    | TEXT    | Device serial number                             |
+| `message`      | TEXT    | Success message                                  |
+| `shared_users` | INTEGER | Total number of users sharing this device (1-3)  |
 
 #### Error Responses
 
@@ -623,17 +679,17 @@ const { data, error } = await supabase.rpc('register_device', {
 ```json
 {
   "success": false,
-  "error": "Device already registered to another user"
+  "error": "Device has reached maximum number of users (3)"
 }
 ```
 
 #### Error Cases
 
-| Error                                           | Cause                                           |
-|-------------------------------------------------|-------------------------------------------------|
-| `Authentication required`                       | No valid session token                           |
-| `Device already registered to your account`     | User already owns this device                    |
-| `Device already registered to another user`     | Another user has registered this device          |
+| Error                                               | Cause                                               |
+|-----------------------------------------------------|-----------------------------------------------------|
+| `Authentication required`                           | No valid session token                               |
+| `Device already registered to your account`         | User already owns this device                        |
+| `Device has reached maximum number of users (3)`    | 3 users already registered to this device            |
 
 ---
 
@@ -792,7 +848,9 @@ const { data, error } = await supabase.rpc('get_air_quality_map');
 
 ### 7.2 get_public_air_quality
 
-Retrieves air quality data for **all** devices that have GPS coordinates. This is a **public endpoint**  - no authentication required. Designed for the public-facing air quality map.
+Retrieves air quality data for devices that have GPS coordinates. This is a **public endpoint**  - no authentication required. Designed for the public-facing air quality map.
+
+By default (`p_public_only = true`), returns only devices where `is_public = true`. Pass `p_public_only = false` to include all devices with coordinates (original behavior).
 
 Provides different levels of detail based on device privacy settings:
 - **All devices with coordinates**: Location, sensor readings, device name, data age
@@ -805,16 +863,57 @@ Provides different levels of detail based on device privacy settings:
 
 #### Parameters
 
-None.
+| Name             | Type    | Required | Default | Description                                      |
+|------------------|---------|----------|---------|--------------------------------------------------|
+| `p_public_only`  | BOOLEAN | No       | `true`  | If true, return only `is_public = true` devices. If false, return all devices with coordinates. |
 
 #### Request Example
 
 ```javascript
-// No auth required  - can call with anon key only
+// Default: public devices only (recommended for map)
 const { data, error } = await supabase.rpc('get_public_air_quality');
+
+// Explicit: same as default
+const { data, error } = await supabase.rpc('get_public_air_quality', {
+  p_public_only: true
+});
+
+// All devices with coordinates (original behavior)
+const { data, error } = await supabase.rpc('get_public_air_quality', {
+  p_public_only: false
+});
 ```
 
 #### Response Schema
+
+> **Note:** The default call `get_public_air_quality()` returns **only public devices** (`is_public = true`). The example below shows `p_public_only: false` to illustrate the visibility difference between public and non-public devices.
+
+**Default call** `get_public_air_quality()` — returns only public devices:
+
+```json
+[
+  {
+    "device_id": "582D34712B43",
+    "device_name": "Bedroom",
+    "latitude": 13.7563,
+    "longitude": 100.5018,
+    "is_public": true,
+    "pm25": 12.3,
+    "pm10": 18.7,
+    "co2": 450,
+    "temperature": 28.5,
+    "humidity": 65.2,
+    "age_seconds": 120.5,
+    "display_name": "John Doe",
+    "fan_speed": 45,
+    "fan_mode": "automatic",
+    "fan_state": "running",
+    "is_online": true
+  }
+]
+```
+
+**With** `p_public_only: false` — returns all devices (public + non-public with limited fields):
 
 ```json
 [
@@ -1212,7 +1311,379 @@ const { data, error } = await supabase
 
 ---
 
-## 10. Database Schema
+## 10. API Functions - Outdoor Air Quality
+
+### 10.1 get-outdoor-air (Edge Function)
+
+Retrieves outdoor air quality data from the AQICN API via a backend proxy. Uses geo zone caching (1 hour) to minimize API calls. Accepts either a `device_id` (uses device's registered coordinates) or explicit `latitude`/`longitude`.
+
+| Property        | Value                              |
+|-----------------|------------------------------------|
+| **Type**        | Supabase Edge Function (HTTP POST) |
+| **Auth**        | Required (Bearer token)            |
+| **Cache**       | Geo zone cache, 1 hour TTL         |
+| **Data Source**  | AQICN (World Air Quality Index)   |
+| **Status**      | Active (deployed 27 Mar 2026)      |
+
+#### Endpoint
+
+```
+POST https://brgzimwzcfbwkgymqzvy.supabase.co/functions/v1/get-outdoor-air
+```
+
+#### Headers
+
+```
+Authorization: Bearer <access_token>
+Content-Type: application/json
+```
+
+#### Request Body
+
+Send **either** `device_id` **or** `latitude` + `longitude`:
+
+| Field       | Type   | Required | Description                                      |
+|-------------|--------|----------|--------------------------------------------------|
+| `device_id` | STRING | Option A | Device serial number (uses device's lat/lng from user_devices) |
+| `latitude`  | NUMBER | Option B | GPS latitude (-90 to 90)                         |
+| `longitude` | NUMBER | Option B | GPS longitude (-180 to 180)                      |
+
+#### Request Example - Using Device ID
+
+```javascript
+const { data: { session } } = await supabase.auth.getSession();
+
+const response = await fetch(
+  'https://brgzimwzcfbwkgymqzvy.supabase.co/functions/v1/get-outdoor-air',
+  {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${session.access_token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      device_id: '582D34712B43'
+    })
+  }
+);
+
+const result = await response.json();
+```
+
+#### Request Example - Using Custom Coordinates
+
+```javascript
+const response = await fetch(
+  'https://brgzimwzcfbwkgymqzvy.supabase.co/functions/v1/get-outdoor-air',
+  {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${session.access_token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      latitude: 18.7883,
+      longitude: 98.9853
+    })
+  }
+);
+```
+
+#### Success Response (200)
+
+```json
+{
+  "success": true,
+  "source": "aqicn_api",
+  "cache_age_minutes": 0,
+  "geo_zone": "18.79_98.99",
+  "device_id": "582D34712B43",
+  "device_name": "H&T Living Room",
+  "db_synced": true,
+  "data": {
+    "aqi": 158,
+    "pm25": 158,
+    "pm10": 91,
+    "o3": 14.6,
+    "no2": 7.5,
+    "so2": 0.6,
+    "co": null,
+    "temperature": 35,
+    "humidity": 24,
+    "wind": 3,
+    "dominant_pollutant": "pm25",
+    "station_name": "City Hall, Chiangmai, Thailand",
+    "station_url": "https://aqicn.org/city/thailand/chiangmai/city-hall"
+  },
+  "timestamp": "2026-03-27T06:37:17.111Z"
+}
+```
+
+#### Response Fields
+
+| Field               | Type    | Description                                          |
+|---------------------|---------|------------------------------------------------------|
+| `success`           | BOOLEAN | Always `true` on success                             |
+| `source`            | TEXT    | `"aqicn_api"` (fresh) or `"cache"` (from DB cache)  |
+| `cache_age_minutes` | INTEGER | Minutes since cache was stored (0 = fresh from API)  |
+| `geo_zone`          | TEXT    | Cache key, e.g. `"18.79_98.99"` (lat/lng rounded to 2 decimals, ~1.1 km grid) |
+| `device_id`         | TEXT    | Device serial number (null if using custom lat/lng)  |
+| `device_name`       | TEXT    | Device name (null if using custom lat/lng)           |
+| `db_synced`         | BOOLEAN | Whether the reading was saved to DB cache            |
+| `data.aqi`          | INTEGER | AQI index (US EPA standard)                          |
+| `data.pm25`         | REAL    | PM2.5 concentration                                  |
+| `data.pm10`         | REAL    | PM10 concentration                                   |
+| `data.o3`           | REAL    | Ozone (null if unavailable)                          |
+| `data.no2`          | REAL    | NO2 (null if unavailable)                            |
+| `data.so2`          | REAL    | SO2 (null if unavailable)                            |
+| `data.co`           | REAL    | CO (null if unavailable)                             |
+| `data.temperature`  | REAL    | Temperature from station (C)                         |
+| `data.humidity`     | REAL    | Humidity from station (%)                            |
+| `data.wind`         | REAL    | Wind speed (m/s)                                     |
+| `data.dominant_pollutant` | TEXT | Primary pollutant, e.g. `"pm25"`, `"o3"`       |
+| `data.station_name` | TEXT    | Nearest AQICN station name                           |
+| `data.station_url`  | TEXT    | URL to AQICN station page                            |
+| `timestamp`         | TEXT    | ISO 8601 timestamp of the reading                    |
+
+#### AQI Levels Reference
+
+| AQI Range | Level                    | Color    |
+|-----------|--------------------------|----------|
+| 0-50      | Good                     | Green    |
+| 51-100    | Moderate                 | Yellow   |
+| 101-150   | Unhealthy for Sensitive  | Orange   |
+| 151-200   | Unhealthy                | Red      |
+| 201-300   | Very Unhealthy           | Purple   |
+| 301+      | Hazardous                | Maroon   |
+
+#### Geo Zone Cache Logic
+
+```
+1. Round lat/lng to 2 decimal places (~1.1 km grid)
+2. Create geo_zone key: "{lat_rounded}_{lng_rounded}"
+3. Check outdoor_air_readings for matching geo_zone within 1 hour
+4. Cache HIT  -> return cached data (no AQICN API call)
+5. Cache MISS -> call AQICN API -> store in DB -> return fresh data
+```
+
+#### Error Responses
+
+| HTTP Code | Error                                                        | Cause                                    |
+|-----------|--------------------------------------------------------------|------------------------------------------|
+| 401       | `Missing authorization header`                               | No `Authorization` header                |
+| 401       | `Unauthorized`                                               | Invalid or expired token                 |
+| 400       | `Either device_id or latitude+longitude is required`         | No parameters provided                   |
+| 400       | `Device has no coordinates. Please update device location first.` | Device lat/lng is null              |
+| 400       | `Invalid latitude or longitude values`                       | Non-numeric values                       |
+| 400       | `Coordinates out of range (lat: -90 to 90, lng: -180 to 180)` | Values exceed valid range             |
+| 403       | `Device not found or access denied`                          | Device not owned by user                 |
+| 405       | `Method not allowed`                                         | Not a POST request                       |
+| 502       | `AQICN API request failed`                                   | AQICN API is down                        |
+| 502       | `AQICN API returned error`                                   | AQICN token invalid or other API error   |
+| 500       | `Internal server error`                                      | Unexpected error                         |
+
+---
+
+### 10.2 get-outdoor-air-batch (Edge Function)
+
+Retrieves outdoor air quality data from the AQICN API for **multiple devices** in a single request. Supports two modes: user's own devices (`my_devices`) or all devices with coordinates (`public`). Uses geo zone deduplication and caching to minimize API calls.
+
+| Property        | Value                              |
+|-----------------|------------------------------------|
+| **Type**        | Supabase Edge Function (HTTP POST) |
+| **Auth**        | Required (Bearer token)            |
+| **Cache**       | Geo zone cache, 1 hour TTL         |
+| **Data Source**  | AQICN (World Air Quality Index)   |
+| **Limits**      | Max 100 devices, max 50 unique zones |
+| **AQICN Calls** | Sequential (not parallel)          |
+| **Status**      | Active (deployed 6 Apr 2026)       |
+
+#### Endpoint
+
+```
+POST https://brgzimwzcfbwkgymqzvy.supabase.co/functions/v1/get-outdoor-air-batch
+```
+
+#### Headers
+
+```
+Authorization: Bearer <access_token>
+Content-Type: application/json
+```
+
+#### Request Body
+
+| Field         | Type    | Required | Default | Description                                      |
+|---------------|---------|----------|---------|--------------------------------------------------|
+| `source`      | STRING  | Yes      |  --        | `"my_devices"` or `"public"`                     |
+| `public_only` | BOOLEAN | No       | `false` | If true, filter only `is_public = true` devices (only applies when source = "public") |
+
+#### Mode A: my_devices
+
+Returns outdoor AQI for all devices registered to the authenticated user that have coordinates.
+
+```javascript
+const response = await fetch(
+  'https://brgzimwzcfbwkgymqzvy.supabase.co/functions/v1/get-outdoor-air-batch',
+  {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${session.access_token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      source: 'my_devices'
+    })
+  }
+);
+```
+
+#### Mode B: public (for map)
+
+Returns outdoor AQI for all devices with coordinates. Use `public_only: true` for the public-facing map.
+
+```javascript
+const response = await fetch(
+  'https://brgzimwzcfbwkgymqzvy.supabase.co/functions/v1/get-outdoor-air-batch',
+  {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${session.access_token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      source: 'public',
+      public_only: true
+    })
+  }
+);
+```
+
+#### Success Response (200)
+
+```json
+{
+  "success": true,
+  "source": "public",
+  "public_only": true,
+  "total_devices": 3,
+  "total_zones": 3,
+  "summary": {
+    "cache_hits": 1,
+    "api_calls": 2,
+    "errors": 0
+  },
+  "results": [
+    {
+      "device_id": "582D34712B43",
+      "device_name": "Living Room",
+      "latitude": 13.7440,
+      "longitude": 100.5753,
+      "is_public": true,
+      "geo_zone": "13.74_100.58",
+      "source": "aqicn_api",
+      "cache_age_minutes": 0,
+      "data": {
+        "aqi": 118,
+        "pm25": 118,
+        "pm10": 60,
+        "o3": 4.8,
+        "no2": 15,
+        "so2": null,
+        "co": null,
+        "temperature": 37,
+        "humidity": 32,
+        "wind": 3,
+        "dominant_pollutant": "pm25",
+        "station_name": "National Housing Authority Dindaeng, Bangkok",
+        "station_url": "https://aqicn.org/city/thailand/bangkok/national-housing-authority-dindaeng"
+      },
+      "timestamp": "2026-04-06T08:06:19.511Z",
+      "db_synced": true
+    },
+    {
+      "device_id": "582D34712B40",
+      "device_name": "PTIS JS office",
+      "latitude": 18.9145,
+      "longitude": 98.9094,
+      "is_public": true,
+      "geo_zone": "18.91_98.91",
+      "source": "cache",
+      "cache_age_minutes": 5,
+      "data": {
+        "aqi": 171,
+        "pm25": 171,
+        "pm10": 91,
+        "...": "..."
+      },
+      "timestamp": "2026-04-06T08:06:01.768+00:00",
+      "db_synced": true
+    }
+  ]
+}
+```
+
+#### Response Fields (Top Level)
+
+| Field            | Type    | Description                                      |
+|------------------|---------|--------------------------------------------------|
+| `success`        | BOOLEAN | Always `true` on success                         |
+| `source`         | TEXT    | `"my_devices"` or `"public"`                     |
+| `public_only`    | BOOLEAN | Whether public-only filter was applied           |
+| `total_devices`  | INTEGER | Number of devices in results                     |
+| `total_zones`    | INTEGER | Number of unique geo zones queried               |
+| `summary`        | OBJECT  | Breakdown of cache hits, API calls, and errors   |
+| `results`        | ARRAY   | Per-device results with outdoor AQI data         |
+
+#### Response Fields (Per Device in results[])
+
+| Field              | Type    | Description                                      |
+|--------------------|---------|--------------------------------------------------|
+| `device_id`        | TEXT    | Device serial number                             |
+| `device_name`      | TEXT    | User-assigned device name                        |
+| `latitude`         | NUMBER  | Device GPS latitude                              |
+| `longitude`        | NUMBER  | Device GPS longitude                             |
+| `is_public`        | BOOLEAN | Whether device is public                         |
+| `geo_zone`         | TEXT    | Cache key, e.g. `"18.91_98.91"`                 |
+| `source`           | TEXT    | `"cache"` or `"aqicn_api"`                       |
+| `cache_age_minutes`| INTEGER | Minutes since cache was stored (0 = fresh)       |
+| `data`             | OBJECT  | AQI data (same fields as get-outdoor-air)        |
+| `timestamp`        | TEXT    | ISO 8601 timestamp of the reading                |
+| `db_synced`        | BOOLEAN | Whether data was saved to database               |
+| `error`            | TEXT    | Error message if this zone failed (optional)     |
+
+#### Geo Zone Deduplication
+
+```
+1. Collect all devices with lat/lng
+2. Round each device's lat/lng to 2 decimal places (~1.1 km grid)
+3. Group devices by geo_zone key
+4. For each unique zone (sequential, not parallel):
+   a. Check cache (outdoor_air_readings, < 1 hour)
+   b. Cache HIT  -> reuse cached data
+   c. Cache MISS -> call AQICN API -> store in DB
+5. Map zone results back to individual devices
+```
+
+Example: 10 devices in 4 unique zones = max 4 AQICN API calls (not 10).
+
+#### Error Responses
+
+| HTTP Code | Error                                                        | Cause                                    |
+|-----------|--------------------------------------------------------------|------------------------------------------|
+| 401       | `Missing authorization header`                               | No `Authorization` header                |
+| 401       | `Unauthorized`                                               | Invalid or expired token                 |
+| 400       | `Invalid or missing 'source' parameter`                      | source is not "my_devices" or "public"   |
+| 400       | `Too many devices (N). Maximum is 100.`                      | Exceeds device limit                     |
+| 400       | `Too many unique geo zones (N). Maximum is 50.`              | Exceeds zone limit                       |
+| 405       | `Method not allowed`                                         | Not a POST request                       |
+| 500       | `Internal server error`                                      | Unexpected error                         |
+
+> **Note:** Individual zone errors (e.g. AQICN API failure) do not cause the entire request to fail. Instead, affected devices will have an `error` field in their result while other devices return normally.
+
+---
+
+## 11. Database Schema
 
 ### Table: profiles
 
@@ -1247,7 +1718,7 @@ const { data, error } = await supabase
 
 **Constraints:**
 - `user_id` references `auth.users(id) ON DELETE CASCADE`
-- `UNIQUE (device_id)`  --  one device per user globally
+- `UNIQUE (user_id, device_id)`  --  one user can register a device once; max 3 users per device (enforced in `register_device()` function)
 
 ---
 
@@ -1294,9 +1765,37 @@ const { data, error } = await supabase
 
 ---
 
-## 11. RLS Policies Summary
+### Table: outdoor_air_readings
 
-Row Level Security (RLS) is enabled on all four tables. All policies use the `(select auth.uid())` optimization to prevent PostgreSQL from re-evaluating `auth.uid()` for every row.
+| Column              | Type        | Nullable | Default | Description                          |
+|---------------------|-------------|----------|---------|--------------------------------------|
+| `id`                | BIGSERIAL (PK)| No     | Auto    | Internal row ID                      |
+| `time`              | TIMESTAMPTZ | No       | NOW()   | When the reading was fetched         |
+| `geo_zone`          | TEXT        | No       |  --        | Cache key, e.g. `"18.91_98.91"`     |
+| `station_name`      | TEXT        | Yes      |  --        | Nearest AQICN station name           |
+| `station_url`       | TEXT        | Yes      |  --        | URL to AQICN station page            |
+| `aqi`               | INTEGER     | Yes      |  --        | AQI index (US EPA)                   |
+| `pm25`              | REAL        | Yes      |  --        | PM2.5 concentration                  |
+| `pm10`              | REAL        | Yes      |  --        | PM10 concentration                   |
+| `o3`                | REAL        | Yes      |  --        | Ozone                                |
+| `no2`               | REAL        | Yes      |  --        | NO2                                  |
+| `so2`               | REAL        | Yes      |  --        | SO2                                  |
+| `co`                | REAL        | Yes      |  --        | CO                                   |
+| `temperature`       | REAL        | Yes      |  --        | Temperature from station (C)         |
+| `humidity`          | REAL        | Yes      |  --        | Humidity from station (%)            |
+| `wind`              | REAL        | Yes      |  --        | Wind speed (m/s)                     |
+| `dominant_pollutant`| TEXT        | Yes      |  --        | Primary pollutant (e.g. `"pm25"`)    |
+| `raw_json`          | JSONB       | Yes      |  --        | Raw AQICN API response for reference |
+
+**Index:** `idx_outdoor_air_geo_zone_time` on `(geo_zone, time DESC)` for cache lookup.
+
+> **Note:** This table acts as a geo zone cache for the AQICN API. The `get-outdoor-air` Edge Function inserts rows using the service role key. Data is retained for 180 days (pg_cron cleanup).
+
+---
+
+## 12. RLS Policies Summary
+
+Row Level Security (RLS) is enabled on all five tables. All policies use the `(select auth.uid())` optimization to prevent PostgreSQL from re-evaluating `auth.uid()` for every row.
 
 ### profiles (2 Policies)
 
@@ -1328,11 +1827,18 @@ Row Level Security (RLS) is enabled on all four tables. All policies use the `(s
 | Service can insert status        | INSERT    | `true` (allows service role / EMQX to insert any row)       |
 | Users can view own device status | SELECT    | `device_id IN (SELECT device_id FROM user_devices WHERE user_id = (select auth.uid()))` |
 
-> **Note:** The INSERT policies with `true` are intentional  - EMQX Cloud uses the Supabase service role key to insert sensor/status data. These rows have no user context. The `SECURITY DEFINER` functions handle ownership checks independently.
+### outdoor_air_readings (2 Policies)
+
+| Policy                                       | Operation | Rule                                                   |
+|----------------------------------------------|-----------|--------------------------------------------------------|
+| Authenticated users can view outdoor air data| SELECT    | `true` (all authenticated users can read)              |
+| Service can insert outdoor air readings      | INSERT    | `true` (allows service role / Edge Function to insert) |
+
+> **Note:** The INSERT policies with `true` are intentional  - EMQX Cloud uses the Supabase service role key to insert sensor/status data, and the `get-outdoor-air` Edge Function uses the service role key to insert outdoor air cache data. These rows have no user context. The `SECURITY DEFINER` functions handle ownership checks independently.
 
 ---
 
-## 12. Error Reference
+## 13. Error Reference
 
 ### Common Error Patterns
 
@@ -1355,10 +1861,11 @@ Row Level Security (RLS) is enabled on all four tables. All policies use the `(s
 | 403    | Forbidden (RLS or ownership)    |
 | 405    | Method not allowed              |
 | 500    | Internal server error           |
+| 502    | Bad gateway (upstream API error)|
 
 ---
 
-## 13. Rate Limits & Constraints
+## 14. Rate Limits & Constraints
 
 ### Query Limits
 
@@ -1367,7 +1874,10 @@ Row Level Security (RLS) is enabled on all four tables. All policies use the `(s
 | Max time range        | 7 days    | `get_readings_range`, `get_device_status_range`     |
 | Max rows per query    | 2,000     | `get_readings_range`, `get_device_status_range`     |
 | Device per user       | Unlimited | `register_device`                                   |
-| Device uniqueness     | Global    | One device can only be registered to one user       |
+| Users per device      | Max 3     | `register_device` (Phase 3E device sharing)         |
+| Device uniqueness     | Per user  | Same user cannot register same device twice          |
+| Max devices per batch | 100       | `get-outdoor-air-batch` (Phase 3F)                  |
+| Max zones per batch   | 50        | `get-outdoor-air-batch` (Phase 3F)                  |
 
 ### Data Sampling (EMQX)
 
@@ -1382,6 +1892,16 @@ Row Level Security (RLS) is enabled on all four tables. All policies use the `(s
 |--------------------|-----------|-----------|
 | sensor_readings    | 180 days  | pg_cron   |
 | device_status      | 180 days  | pg_cron   |
+| outdoor_air_readings | 180 days | pg_cron  |
+
+### AQICN API Limits
+
+| Constraint          | Value                  | Notes                                        |
+|---------------------|------------------------|----------------------------------------------|
+| Free tier           | ~1,000 requests/day    | Shared across all Edge Function calls (get-outdoor-air + get-outdoor-air-batch) |
+| Geo zone cache      | 1 hour TTL             | Same geo_zone reuses cached data             |
+| Estimated usage     | ~240-600 calls/day     | Based on 50-100 unique geo zones, 1hr cache  |
+| Batch dedup         | Per request            | Devices in same ~1.1 km zone share one AQICN call |
 
 ### Supabase Free Tier Limits
 
@@ -1397,5 +1917,7 @@ Row Level Security (RLS) is enabled on all four tables. All policies use the `(s
 *End of Documentation*
 
 *This document is part of the BE-TPP Handoff Package for Phase 4 (Dashboard Development).*
-*For project status and architecture details, see `BE-TPP_Project_Status_v6.md`.*
+*For project status and architecture details, see `BE-TPP_Project_Status_v9.md`.*
 *For a live test console, visit: https://warunyususen.github.io/be-tpp-api-sample/*
+*Change from v1.2: Added Section 10.2 (get-outdoor-air-batch), updated Section 7.2 (get_public_air_quality p_public_only parameter)*
+*Change from v1.1: Added Section 10 (Outdoor Air Quality - AQICN Edge Function), outdoor_air_readings schema, RLS policies, AQICN rate limits*
