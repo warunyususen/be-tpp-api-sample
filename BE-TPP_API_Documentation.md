@@ -1,7 +1,7 @@
 # BE-TPP API Documentation
 
-**Version:** 1.3
-**Last Updated:** 6 April 2026
+**Version:** 1.4
+**Last Updated:** 10 April 2026
 **Project:** BE-TPP IoT (Breatheeasy Total Positive Pressure)
 
 ---
@@ -34,10 +34,14 @@
 10. [API Functions  --  Outdoor Air Quality](#10-api-functions--outdoor-air-quality)
     - 10.1 [get-outdoor-air (Edge Function)](#101-get-outdoor-air-edge-function)
     - 10.2 [get-outdoor-air-batch (Edge Function)](#102-get-outdoor-air-batch-edge-function)
-11. [Database Schema](#11-database-schema)
-12. [RLS Policies Summary](#12-rls-policies-summary)
-13. [Error Reference](#13-error-reference)
-14. [Rate Limits & Constraints](#14-rate-limits--constraints)
+11. [API Functions  --  Thai Air Quality (Nationwide)](#11-api-functions--thai-air-quality-nationwide)
+    - 11.1 [v_thai_air_latest (View — REST Query)](#111-v_thai_air_latest-view--rest-query)
+    - 11.2 [thai_air_readings (History — REST Query)](#112-thai_air_readings-history--rest-query)
+    - 11.3 [fetch-thai-air (Edge Function — Cron/Admin)](#113-fetch-thai-air-edge-function--cronadmin)
+12. [Database Schema](#12-database-schema)
+13. [RLS Policies Summary](#13-rls-policies-summary)
+14. [Error Reference](#14-error-reference)
+15. [Rate Limits & Constraints](#15-rate-limits--constraints)
 
 ---
 
@@ -58,9 +62,9 @@ ESP32 Devices --MQTT--> EMQX Cloud --REST--> Supabase PostgreSQL
                                               +-----+-----+
                                                     |
                                     +---------------+---------------+
-                                    |                               |
-                              Web Dashboard                   AQICN API
-                                                        (Outdoor Air Quality)
+                                    |               |               |
+                              Web Dashboard   AQICN API     Air4Thai + CUSense
+                                          (per device)    (245 stations, pg_cron 1hr)
 ```
 
 ### Tech Stack
@@ -73,6 +77,7 @@ ESP32 Devices --MQTT--> EMQX Cloud --REST--> Supabase PostgreSQL
 | Authentication  | Supabase Auth (Magic Link + Email OTP) |
 | Edge Functions  | Supabase Edge Functions (Deno)      |
 | Outdoor Air     | AQICN API (via Edge Function proxy) |
+| Thai Air        | Air4Thai (PCD) + CUSense (Chula) — 245 stations |
 | Hosting         | GitHub Pages (test console)         |
 | Email           | Resend (noreply@be-tpp.com)         |
 
@@ -91,7 +96,8 @@ ESP32 Devices --MQTT--> EMQX Cloud --REST--> Supabase PostgreSQL
 - **Device status**: ESP32 publishes every 30 seconds -> EMQX samples every 5 minutes -> Supabase INSERT
 - **Fan control**: Web App -> Edge Function -> MQTT publish to EMQX + INSERT to `device_status` -> Realtime notification
 - **Outdoor air quality**: Web/Mobile App -> Edge Function (`get-outdoor-air`) -> AQICN API (cache 1 hr in `outdoor_air_readings`)
-- **Data retention**: 180 days (automated via `pg_cron`)
+- **Thai air quality**: pg_cron (hourly) -> Edge Function (`fetch-thai-air`) -> Air4Thai + CUSense -> `thai_air_stations` + `thai_air_readings` (245 stations, ~2s per run)
+- **Data retention**: 180 days (sensor/device/outdoor), 90 days (thai_air_readings)
 - **Deduplication**: `time_bucket` column with UPSERT prevents duplicate entries
 
 ---
@@ -1683,7 +1689,248 @@ Example: 10 devices in 4 unique zones = max 4 AQICN API calls (not 10).
 
 ---
 
-## 11. Database Schema
+## 11. API Functions - Thai Air Quality (Nationwide)
+
+ข้อมูลคุณภาพอากาศทั่วประเทศไทย จาก 2 แหล่ง: **Air4Thai** (กรมควบคุมมลพิษ, 186 สถานี) + **CUSense** (จุฬาลงกรณ์, ~59 สถานี) รวม **245 สถานี** อัปเดตทุก 1 ชั่วโมง ผ่าน Edge Function `fetch-thai-air` (pg_cron)
+
+| Property        | Value                              |
+|-----------------|------------------------------------|
+| **Data Sources** | Air4Thai (PCD) + CUSense (Chula)  |
+| **Stations**    | 245 (186 Air4Thai + ~59 CUSense)   |
+| **Update**      | Every hour (pg_cron at xx:05)      |
+| **Retention**   | 90 days (pg_cron cleanup 03:30 UTC)|
+| **Auth**        | Public read (anon key), Admin write|
+| **Status**      | Active (deployed 9-10 Apr 2026)    |
+
+### 11.1 v_thai_air_latest (View — REST Query)
+
+ดึงข้อมูลล่าสุดของทุกสถานี (JOIN stations + readings ล่าสุด + คำนวณ aqi_level)
+เป็น **public view** ไม่ต้อง login — ใช้ anon key ได้เลย
+
+#### Endpoint
+
+```
+GET https://brgzimwzcfbwkgymqzvy.supabase.co/rest/v1/v_thai_air_latest?select=*
+```
+
+#### Headers
+
+```
+apikey: <SUPABASE_ANON_KEY>
+```
+
+#### Filter Examples
+
+```
+// ดึงทุกสถานี (245 rows)
+GET .../rest/v1/v_thai_air_latest?select=*
+
+// ดึงเฉพาะจังหวัด
+GET .../rest/v1/v_thai_air_latest?select=*&province=eq.อุดรธานี
+
+// ดึงเฉพาะ PM2.5 > 50 เรียงจากมากไปน้อย
+GET .../rest/v1/v_thai_air_latest?select=*&pm25=gt.50&order=pm25.desc
+
+// ดึงเฉพาะ source
+GET .../rest/v1/v_thai_air_latest?select=*&source=eq.cusense
+```
+
+#### Request Example (JavaScript)
+
+```javascript
+const { data, error } = await supabase
+  .from('v_thai_air_latest')
+  .select('*');
+
+// Filter by province
+const { data, error } = await supabase
+  .from('v_thai_air_latest')
+  .select('*')
+  .eq('province', 'อุดรธานี');
+
+// Filter PM2.5 > 50
+const { data, error } = await supabase
+  .from('v_thai_air_latest')
+  .select('*')
+  .gt('pm25', 50)
+  .order('pm25', { ascending: false });
+```
+
+#### Success Response (200)
+
+```json
+{
+  "station_id": 1,
+  "source": "air4thai",
+  "source_station_id": "119t",
+  "name": "สวนสาธารณะธารา",
+  "name_en": "Thara Public Park",
+  "latitude": 8.0506237,
+  "longitude": 98.9180489,
+  "province": "กระบี่",
+  "amphoe": null,
+  "station_type": "GROUND",
+  "pm25": 18.3,
+  "pm10": null,
+  "pm1": null,
+  "aqi": 34,
+  "temperature": null,
+  "humidity": null,
+  "measured_at": "2026-04-09T16:00:00+07:00",
+  "fetched_at": "2026-04-10T09:05:04.086+00:00",
+  "aqi_level": "good"
+}
+```
+
+#### Response Fields
+
+| Field               | Type    | Description                                          |
+|---------------------|---------|------------------------------------------------------|
+| `station_id`        | INTEGER | Internal station ID (FK to thai_air_stations)        |
+| `source`            | TEXT    | `"air4thai"` or `"cusense"`                          |
+| `source_station_id` | TEXT    | Original station ID from source API                  |
+| `name`              | TEXT    | Station name (Thai)                                  |
+| `name_en`           | TEXT    | Station name (English, Air4Thai only)                |
+| `latitude`          | REAL    | GPS latitude                                         |
+| `longitude`         | REAL    | GPS longitude                                        |
+| `province`          | TEXT    | Province name (Thai)                                 |
+| `amphoe`            | TEXT    | District name (CUSense only)                         |
+| `station_type`      | TEXT    | Air4Thai: GROUND/BKK/MOBILE, CUSense: cusensor3/nansensor/cusensor2 |
+| `pm25`              | REAL    | PM2.5 (µg/m³)                                       |
+| `pm10`              | REAL    | PM10 (µg/m³)                                        |
+| `pm1`               | REAL    | PM1.0 (CUSense only)                                |
+| `aqi`               | INTEGER | AQI index (Air4Thai only)                            |
+| `temperature`       | REAL    | Temperature (CUSense only)                           |
+| `humidity`          | REAL    | Humidity (CUSense only)                              |
+| `measured_at`       | TEXT    | When the source API recorded the data                |
+| `fetched_at`        | TEXT    | When our system fetched the data                     |
+| `aqi_level`         | TEXT    | Calculated AQI level based on PM2.5 (Thai standard) |
+
+#### AQI Level (Thai Standard — based on PM2.5)
+
+| aqi_level   | PM2.5 (µg/m³) | Color  | Meaning                      |
+|-------------|----------------|--------|------------------------------|
+| excellent   | 0 - 15.0       | Blue   | คุณภาพอากาศดีมาก            |
+| good        | 15.1 - 25.0    | Green  | คุณภาพอากาศดี                |
+| moderate    | 25.1 - 37.5    | Yellow | ปานกลาง                      |
+| unhealthy   | 37.6 - 75.0    | Orange | มีผลกระทบต่อสุขภาพ          |
+| hazardous   | > 75.0         | Red    | มีผลกระทบต่อสุขภาพมาก       |
+
+---
+
+### 11.2 thai_air_readings (History — REST Query)
+
+ดึงประวัติข้อมูลรายชั่วโมงของสถานีเดียว (สำหรับกราฟ)
+
+#### Endpoint
+
+```
+GET https://brgzimwzcfbwkgymqzvy.supabase.co/rest/v1/thai_air_readings?select=*&station_id=eq.{id}&order=measured_at.desc&limit=24
+```
+
+#### Headers
+
+```
+apikey: <SUPABASE_ANON_KEY>
+```
+
+#### Request Example (JavaScript)
+
+```javascript
+// ดึง 24 ชั่วโมงล่าสุดของสถานี ID 1
+const { data, error } = await supabase
+  .from('thai_air_readings')
+  .select('*')
+  .eq('station_id', 1)
+  .order('measured_at', { ascending: false })
+  .limit(24);
+```
+
+#### Success Response (200)
+
+```json
+{
+  "id": 123,
+  "station_id": 1,
+  "pm25": 18.3,
+  "pm10": 25.1,
+  "pm1": null,
+  "aqi": 34,
+  "temperature": null,
+  "humidity": null,
+  "co2": null,
+  "o3": 12.5,
+  "no2": 5.2,
+  "so2": 1.1,
+  "co": 0.3,
+  "measured_at": "2026-04-10T09:00:00+07:00",
+  "fetched_at": "2026-04-10T09:05:04.086+00:00"
+}
+```
+
+---
+
+### 11.3 fetch-thai-air (Edge Function — Cron/Admin)
+
+Edge Function สำหรับดึงข้อมูลจาก Air4Thai + CUSense และ sync ลง DB ทำงานผ่าน pg_cron ทุก 1 ชั่วโมง (นาทีที่ 5) ไม่ได้ออกแบบให้ Frontend เรียกโดยตรง
+
+| Property        | Value                              |
+|-----------------|------------------------------------|
+| **Type**        | Supabase Edge Function (HTTP POST) |
+| **Auth**        | service_role key or valid user JWT |
+| **Schedule**    | pg_cron `5 * * * *` (ทุก 1 ชม.)  |
+| **Performance** | ~2 seconds (batch operations)      |
+| **Status**      | Active (Round 3A — 10 Apr 2026)    |
+
+#### Endpoint
+
+```
+POST https://brgzimwzcfbwkgymqzvy.supabase.co/functions/v1/fetch-thai-air
+```
+
+#### Manual Test (cURL)
+
+```bash
+curl -X POST 'https://brgzimwzcfbwkgymqzvy.supabase.co/functions/v1/fetch-thai-air' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer {SERVICE_ROLE_KEY}' \
+  -d '{}'
+```
+
+#### Success Response (200)
+
+```json
+{
+  "success": true,
+  "fetched": {
+    "air4thai": { "stations": 186, "readings": 186, "error": null },
+    "cusense": { "stations": 58, "readings": 58, "error": null },
+    "total_stations": 244,
+    "total_readings": 244
+  },
+  "synced": {
+    "stations_upserted": 244,
+    "readings_inserted": 177,
+    "readings_skipped_duplicate": 0,
+    "errors": []
+  },
+  "elapsed_ms": 1918,
+  "next_run": "ทุก 1 ชั่วโมง (pg_cron)"
+}
+```
+
+#### Data Sources
+
+| Source   | URL / Endpoint                                          | Auth              | Stations |
+|----------|--------------------------------------------------------|-------------------|----------|
+| Air4Thai | `http://air4thai.pcd.go.th/services/getNewAQI_JSON.php`| None (public)     | 186      |
+| CUSense  | `https://www.cusense.net:8082/api/v1/sensorData/realtime/all` | X-Gravitee-Api-Key | ~59 (non-PCD) |
+
+> **Note:** CUSense stations starting with `PCD/` (158 stations) are duplicates of Air4Thai data and are excluded. Only cusensor3/nansensor/cusensor2 projects (~59 stations) are fetched.
+
+---
+
+## 12. Database Schema
 
 ### Table: profiles
 
@@ -1791,9 +2038,78 @@ Example: 10 devices in 4 unique zones = max 4 AQICN API calls (not 10).
 
 > **Note:** This table acts as a geo zone cache for the AQICN API. The `get-outdoor-air` Edge Function inserts rows using the service role key. Data is retained for 180 days (pg_cron cleanup).
 
+### Table: thai_air_stations
+
+| Column              | Type         | Nullable | Default | Description                          |
+|---------------------|--------------|----------|---------|--------------------------------------|
+| `id`                | BIGSERIAL (PK)| No     | Auto    | Internal station ID                  |
+| `source`            | TEXT        | No       |  --        | `"air4thai"` or `"cusense"`         |
+| `source_station_id` | TEXT        | No       |  --        | Original station ID from source API  |
+| `name`              | TEXT        | Yes      |  --        | Station name (Thai)                  |
+| `name_en`           | TEXT        | Yes      |  --        | Station name (English)               |
+| `latitude`          | REAL        | Yes      |  --        | GPS latitude                         |
+| `longitude`         | REAL        | Yes      |  --        | GPS longitude                        |
+| `province`          | TEXT        | Yes      |  --        | Province name (Thai)                 |
+| `amphoe`            | TEXT        | Yes      |  --        | District name                        |
+| `tambol`            | TEXT        | Yes      |  --        | Sub-district name                    |
+| `station_type`      | TEXT        | Yes      |  --        | Type (GROUND/BKK/MOBILE/cusensor3/nansensor) |
+| `is_active`         | BOOLEAN     | No       | true    | Whether station is active            |
+| `updated_at`        | TIMESTAMPTZ | No       | NOW()   | Last updated time                    |
+
+**Unique Constraint:** `(source, source_station_id)` — UPSERT key for deduplication across sources.
+
+### Table: thai_air_readings
+
+| Column              | Type         | Nullable | Default | Description                          |
+|---------------------|--------------|----------|---------|--------------------------------------|
+| `id`                | BIGSERIAL (PK)| No     | Auto    | Internal row ID                      |
+| `station_id`        | BIGINT (FK) | No       |  --        | References thai_air_stations(id)     |
+| `pm25`              | REAL        | Yes      |  --        | PM2.5 (µg/m³)                       |
+| `pm10`              | REAL        | Yes      |  --        | PM10 (µg/m³)                        |
+| `pm1`               | REAL        | Yes      |  --        | PM1.0 (CUSense only)                |
+| `aqi`               | INTEGER     | Yes      |  --        | AQI index (Air4Thai only)            |
+| `temperature`       | REAL        | Yes      |  --        | Temperature (CUSense only)           |
+| `humidity`          | REAL        | Yes      |  --        | Humidity (CUSense only)              |
+| `co2`               | REAL        | Yes      |  --        | CO2 (CUSense only)                  |
+| `o3`                | REAL        | Yes      |  --        | Ozone (Air4Thai only)                |
+| `no2`               | REAL        | Yes      |  --        | NO2 (Air4Thai only)                  |
+| `so2`               | REAL        | Yes      |  --        | SO2 (Air4Thai only)                  |
+| `co`                | REAL        | Yes      |  --        | CO (Air4Thai only)                   |
+| `measured_at`       | TIMESTAMPTZ | No       |  --        | When source API recorded the data    |
+| `fetched_at`        | TIMESTAMPTZ | No       | NOW()   | When our system fetched the data     |
+
+**Unique Index:** `idx_thai_air_readings_dedup` on `(station_id, measured_at)` — prevents duplicate readings.
+
+> **Note:** Data is retained for 90 days (pg_cron cleanup at 03:30 UTC daily). The `fetch-thai-air` Edge Function inserts rows via batch UPSERT with `ignoreDuplicates: true`.
+
+### View: v_thai_air_latest
+
+A materialized-style view that JOINs `thai_air_stations` with the latest reading per station from `thai_air_readings`, and calculates `aqi_level` based on Thai PM2.5 standard. Frontend should query this view for the air quality map.
+
+```sql
+-- Simplified structure
+SELECT s.*, r.pm25, r.pm10, r.aqi, r.measured_at, r.fetched_at,
+  CASE
+    WHEN r.pm25 <= 15.0 THEN 'excellent'
+    WHEN r.pm25 <= 25.0 THEN 'good'
+    WHEN r.pm25 <= 37.5 THEN 'moderate'
+    WHEN r.pm25 <= 75.0 THEN 'unhealthy'
+    ELSE 'hazardous'
+  END AS aqi_level
+FROM thai_air_stations s
+LEFT JOIN LATERAL (
+  SELECT * FROM thai_air_readings
+  WHERE station_id = s.id
+  ORDER BY measured_at DESC LIMIT 1
+) r ON true
+WHERE s.is_active = true;
+```
+
+> **Note:** `security_invoker = on` — view respects caller's RLS permissions.
+
 ---
 
-## 12. RLS Policies Summary
+## 13. RLS Policies Summary
 
 Row Level Security (RLS) is enabled on all five tables. All policies use the `(select auth.uid())` optimization to prevent PostgreSQL from re-evaluating `auth.uid()` for every row.
 
@@ -1836,9 +2152,25 @@ Row Level Security (RLS) is enabled on all five tables. All policies use the `(s
 
 > **Note:** The INSERT policies with `true` are intentional  - EMQX Cloud uses the Supabase service role key to insert sensor/status data, and the `get-outdoor-air` Edge Function uses the service role key to insert outdoor air cache data. These rows have no user context. The `SECURITY DEFINER` functions handle ownership checks independently.
 
+### thai_air_stations (2 Policies)
+
+| Policy                              | Operation | Rule                                                   |
+|-------------------------------------|-----------|--------------------------------------------------------|
+| thai_air_stations_read_all          | SELECT    | `true` (public data, all users can read)               |
+| thai_air_stations_service_write     | ALL       | `true` (service_role only via Edge Function)            |
+
+### thai_air_readings (2 Policies)
+
+| Policy                              | Operation | Rule                                                   |
+|-------------------------------------|-----------|--------------------------------------------------------|
+| thai_air_readings_read_all          | SELECT    | `true` (public data, all users can read)               |
+| thai_air_readings_service_write     | ALL       | `true` (service_role only via Edge Function)            |
+
+> **Note:** Thai Air data is public — both stations and readings are readable by anyone with the anon key. Write access is restricted to service_role (used by the `fetch-thai-air` Edge Function via pg_cron).
+
 ---
 
-## 13. Error Reference
+## 14. Error Reference
 
 ### Common Error Patterns
 
@@ -1865,7 +2197,7 @@ Row Level Security (RLS) is enabled on all five tables. All policies use the `(s
 
 ---
 
-## 14. Rate Limits & Constraints
+## 15. Rate Limits & Constraints
 
 ### Query Limits
 
@@ -1893,6 +2225,7 @@ Row Level Security (RLS) is enabled on all five tables. All policies use the `(s
 | sensor_readings    | 180 days  | pg_cron   |
 | device_status      | 180 days  | pg_cron   |
 | outdoor_air_readings | 180 days | pg_cron  |
+| thai_air_readings  | 90 days   | pg_cron (03:30 UTC daily) |
 
 ### AQICN API Limits
 
@@ -1912,12 +2245,24 @@ Row Level Security (RLS) is enabled on all five tables. All policies use the `(s
 | Realtime connections | 200 concurrent       |
 | Edge Function invocations | 500,000/month  |
 
+### Thai Air Quality Limits
+
+| Constraint          | Value                  | Notes                                        |
+|---------------------|------------------------|----------------------------------------------|
+| Air4Thai            | 1 request/hour         | Returns all 186 stations in 1 call           |
+| CUSense             | 1 request/hour         | Returns all ~59 non-PCD stations in 1 call   |
+| Total API calls     | 2 per hour (pg_cron)   | Minimal load on source APIs                  |
+| fetch-thai-air      | ~2 seconds per run     | Batch UPSERT + batch INSERT (Round 3A)       |
+| Dedup               | (station_id, measured_at) | Prevents duplicate readings on re-run     |
+| Storage estimate    | ~100 MB at 90 days     | 245 stations x 24 hrs x 90 days = ~529K rows|
+
 ---
 
 *End of Documentation*
 
 *This document is part of the BE-TPP Handoff Package for Phase 4 (Dashboard Development).*
-*For project status and architecture details, see `BE-TPP_Project_Status_v9.md`.*
+*For project status and architecture details, see `BE-TPP_Project_Status_v10.md`.*
 *For a live test console, visit: https://warunyususen.github.io/be-tpp-api-sample/*
+*Change from v1.3: Added Section 11 (Thai Air Quality — v_thai_air_latest, thai_air_readings, fetch-thai-air), thai_air_stations/readings DB schema, RLS policies, retention 90 days, Thai Air rate limits*
 *Change from v1.2: Added Section 10.2 (get-outdoor-air-batch), updated Section 7.2 (get_public_air_quality p_public_only parameter)*
 *Change from v1.1: Added Section 10 (Outdoor Air Quality - AQICN Edge Function), outdoor_air_readings schema, RLS policies, AQICN rate limits*
