@@ -120,6 +120,7 @@
         .tag-mqtt { background: var(--amber-dim); color: var(--amber); }
         .tag-device { background: var(--green-dim); color: var(--green); }
         .tag-profile { background: var(--accent-dim); color: var(--accent); }
+        .tag-thai-air { background: rgba(96, 165, 250, 0.12); color: #60a5fa; }
 
         .auth-form {
             display: flex;
@@ -1154,6 +1155,76 @@
                 <div id="outputOutdoorAirBatch"></div>
             </div>
         </div>    </div>
+
+    <!-- ===== Section: Thai Air Quality (Nationwide — No Login Required) ===== -->
+    <div id="thaiAirSection">
+        <div class="divider"></div>
+
+        <div class="dm-section">
+            <div class="dm-section-title">
+                <span class="section-tag tag-thai-air">&#127758; Thai Air Quality (Nationwide)</span>
+                <span style="font-size:12px; color:var(--text-dim); font-weight:400;">245 สถานี — ไม่ต้อง Login</span>
+            </div>
+
+            <!-- Card 11: Thai Air Latest (v_thai_air_latest) -->
+            <div class="api-card" style="margin-bottom:16px;">
+                <div class="api-card-header">
+                    <h3>
+                        <span class="method-badge method-rpc">REST</span>
+                        v_thai_air_latest
+                    </h3>
+                    <button class="btn btn-primary btn-sm" onclick="testThaiAirLatest()" id="btnThaiAirLatest">
+                        &#9654; Run
+                    </button>
+                </div>
+                <div class="api-card-body">
+                    <p>ดึงข้อมูลล่าสุดจาก 245 สถานีทั่วไทย (Air4Thai + CUSense) พร้อม aqi_level</p>
+                    <div class="param-row">
+                        <span class="param-label">filter</span>
+                        <select class="param-input" id="thaiAirFilter" onchange="onThaiAirFilterChange()">
+                            <option value="all" selected>ทุกสถานี (245)</option>
+                            <option value="province">เฉพาะจังหวัด</option>
+                            <option value="unhealthy">PM2.5 > 37.5 (unhealthy+)</option>
+                        </select>
+                    </div>
+                    <div class="param-row hidden" id="thaiAirProvinceRow">
+                        <span class="param-label">province</span>
+                        <input type="text" class="param-input" id="thaiAirProvince" placeholder="เช่น อุดรธานี, กรุงเทพมหานคร" />
+                    </div>
+                    <div id="outputThaiAirLatest"></div>
+                </div>
+            </div>
+
+            <!-- Card 12: Thai Air History (thai_air_readings) -->
+            <div class="api-card">
+                <div class="api-card-header">
+                    <h3>
+                        <span class="method-badge method-rpc">REST</span>
+                        thai_air_readings
+                    </h3>
+                    <button class="btn btn-primary btn-sm" onclick="testThaiAirHistory()" id="btnThaiAirHistory">
+                        &#9654; Run
+                    </button>
+                </div>
+                <div class="api-card-body">
+                    <p>ดึงประวัติรายชั่วโมงของสถานีเดียว (สำหรับกราฟ)</p>
+                    <div class="param-row">
+                        <span class="param-label">station_id</span>
+                        <input type="number" class="param-input" id="thaiAirStationId" placeholder="เช่น 1 (ได้จากผลลัพธ์ v_thai_air_latest)" />
+                    </div>
+                    <div class="param-row">
+                        <span class="param-label">limit</span>
+                        <select class="param-input" id="thaiAirLimit">
+                            <option value="24" selected>24 ชั่วโมง</option>
+                            <option value="48">48 ชั่วโมง</option>
+                            <option value="168">7 วัน (168 ชม.)</option>
+                        </select>
+                    </div>
+                    <div id="outputThaiAirHistory"></div>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- ===== Section: Profile Management (shown after login) ===== -->
     <div class="hidden" id="profileSection">
@@ -2301,6 +2372,158 @@ async function testOutdoorAirBatch() {
             'Edge Function not deployed yet or URL is incorrect\n\n' + err.message);
     }
 }
+// ============================================================
+// Thai Air Quality: UI Helpers
+// ============================================================
+function onThaiAirFilterChange() {
+    var filter = document.getElementById('thaiAirFilter').value;
+    document.getElementById('thaiAirProvinceRow').classList.toggle('hidden', filter !== 'province');
+}
+
+// ============================================================
+// Thai Air Quality: Test v_thai_air_latest
+// ============================================================
+async function testThaiAirLatest() {
+    showLoading('outputThaiAirLatest');
+    var start = performance.now();
+    var filter = document.getElementById('thaiAirFilter').value;
+
+    try {
+        var query = sb.from('v_thai_air_latest').select('*');
+
+        if (filter === 'province') {
+            var province = document.getElementById('thaiAirProvince').value.trim();
+            if (!province) {
+                createOutput('outputThaiAirLatest', 'err', 'Validation Error', '0ms', 'กรุณาระบุชื่อจังหวัด');
+                return;
+            }
+            query = query.ilike('province', '%' + province + '%');
+        } else if (filter === 'unhealthy') {
+            query = query.gt('pm25', 37.5).order('pm25', { ascending: false });
+        }
+
+        var { data, error } = await query;
+        var elapsed = Math.round(performance.now() - start);
+
+        if (error) {
+            createOutput('outputThaiAirLatest', 'err', 'Error: ' + error.code, formatTime(elapsed), error.message);
+            return;
+        }
+
+        // สร้าง summary
+        var summary = {
+            total_stations: data.length,
+            filter: filter,
+        };
+
+        if (data.length > 0) {
+            // นับแยก source
+            var air4thai = data.filter(function(s) { return s.source === 'air4thai'; }).length;
+            var cusense = data.filter(function(s) { return s.source === 'cusense'; }).length;
+            summary.sources = { air4thai: air4thai, cusense: cusense };
+
+            // นับ aqi_level
+            var levels = {};
+            data.forEach(function(s) {
+                var lv = s.aqi_level || 'unknown';
+                levels[lv] = (levels[lv] || 0) + 1;
+            });
+            summary.aqi_levels = levels;
+
+            // แสดง top 5 ฝุ่นสูงสุด
+            var sorted = data.filter(function(s) { return s.pm25 != null; })
+                .sort(function(a, b) { return (b.pm25 || 0) - (a.pm25 || 0); });
+            summary.top5_pm25 = sorted.slice(0, 5).map(function(s) {
+                return {
+                    name: s.name,
+                    province: s.province,
+                    pm25: s.pm25,
+                    aqi_level: s.aqi_level,
+                    source: s.source,
+                };
+            });
+
+            // แสดง data age
+            if (data[0].fetched_at) {
+                var ageMin = Math.round((Date.now() - new Date(data[0].fetched_at).getTime()) / 60000);
+                summary.data_age_minutes = ageMin;
+            }
+        }
+
+        var statusText = '200 OK \u2014 ' + data.length + ' stations';
+        createOutput('outputThaiAirLatest', 'ok', statusText, formatTime(elapsed), summary);
+    } catch (err) {
+        var elapsed = Math.round(performance.now() - start);
+        createOutput('outputThaiAirLatest', 'err', 'Network Error', formatTime(elapsed), err.message);
+    }
+}
+
+// ============================================================
+// Thai Air Quality: Test thai_air_readings (History)
+// ============================================================
+async function testThaiAirHistory() {
+    showLoading('outputThaiAirHistory');
+    var start = performance.now();
+    var stationId = document.getElementById('thaiAirStationId').value;
+    var limit = parseInt(document.getElementById('thaiAirLimit').value) || 24;
+
+    if (!stationId) {
+        createOutput('outputThaiAirHistory', 'err', 'Validation Error', '0ms',
+            'กรุณาระบุ station_id (ดูได้จากผลลัพธ์ v_thai_air_latest)');
+        return;
+    }
+
+    try {
+        var { data, error } = await sb
+            .from('thai_air_readings')
+            .select('*')
+            .eq('station_id', parseInt(stationId))
+            .order('measured_at', { ascending: false })
+            .limit(limit);
+
+        var elapsed = Math.round(performance.now() - start);
+
+        if (error) {
+            createOutput('outputThaiAirHistory', 'err', 'Error: ' + error.code, formatTime(elapsed), error.message);
+            return;
+        }
+
+        var summary = {
+            station_id: parseInt(stationId),
+            readings_returned: data.length,
+            limit: limit,
+        };
+
+        if (data.length > 0) {
+            summary.latest = {
+                pm25: data[0].pm25,
+                pm10: data[0].pm10,
+                aqi: data[0].aqi,
+                measured_at: data[0].measured_at,
+            };
+            summary.oldest = {
+                pm25: data[data.length - 1].pm25,
+                measured_at: data[data.length - 1].measured_at,
+            };
+            // PM2.5 min/max/avg
+            var pm25vals = data.filter(function(r) { return r.pm25 != null; }).map(function(r) { return r.pm25; });
+            if (pm25vals.length > 0) {
+                summary.pm25_stats = {
+                    min: Math.min.apply(null, pm25vals),
+                    max: Math.max.apply(null, pm25vals),
+                    avg: Math.round(pm25vals.reduce(function(a, b) { return a + b; }, 0) / pm25vals.length * 10) / 10,
+                };
+            }
+        }
+
+        var statusText = '200 OK \u2014 ' + data.length + ' readings';
+        createOutput('outputThaiAirHistory', 'ok', statusText, formatTime(elapsed), summary);
+    } catch (err) {
+        var elapsed = Math.round(performance.now() - start);
+        createOutput('outputThaiAirHistory', 'err', 'Network Error', formatTime(elapsed), err.message);
+    }
+}
+
 // ============================================================
 // UI Helpers (Fan Control)
 // ============================================================
