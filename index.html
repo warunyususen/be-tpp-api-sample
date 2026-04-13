@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="th">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -121,6 +121,7 @@
         .tag-device { background: var(--green-dim); color: var(--green); }
         .tag-profile { background: var(--accent-dim); color: var(--accent); }
         .tag-thai-air { background: rgba(96, 165, 250, 0.12); color: #60a5fa; }
+        .tag-aqicn { background: rgba(167, 139, 250, 0.12); color: #a78bfa; }
 
         .auth-form {
             display: flex;
@@ -1076,7 +1077,7 @@
             </div>
         </div>
 
-        <!-- Card 8: get_public_air_quality (Phase 3D + 3F: เพิ่ม public_only filter) -->
+        <!-- Card 8: get_public_air_quality (Phase 3D + 3F: added public_only filter) -->
         <div class="api-card">
             <div class="api-card-header">
                 <h3>
@@ -1110,7 +1111,7 @@
                 </button>
             </div>
             <div class="api-card-body">
-                <p style="color:var(--red);font-size:12px;margin-bottom:8px">⚠ Deprecated since v1.5 — ใช้ <code>aqicn_stations</code> REST API แทน (ไม่ต้อง login, 470 สถานี, อัปเดตทุก 1 ชม.)</p>
+                <p style="color:var(--red);font-size:12px;margin-bottom:8px">⚠ Deprecated since v1.5 — Use <code>aqicn_stations</code> REST API instead (no login required, 470 stations, updated every hour)</p>
                 <p>Get outdoor air quality from AQICN via Edge Function (Proxy + Geo Zone Cache 1hr)</p>
                 <div class="param-row">
                     <span class="param-label">mode</span>
@@ -1144,18 +1145,18 @@
                 </button>
             </div>
             <div class="api-card-body">
-                <p style="color:var(--red);font-size:12px;margin-bottom:8px">⚠ Deprecated since v1.5 — ใช้ <code>aqicn_stations</code> REST API แทน (ไม่ต้อง login, 470 สถานี, อัปเดตทุก 1 ชม.)</p>
+                <p style="color:var(--red);font-size:12px;margin-bottom:8px">⚠ Deprecated since v1.5 — Use <code>aqicn_stations</code> REST API instead (no login required, 470 stations, updated every hour)</p>
                 <p>Batch outdoor AQI for multiple devices via AQICN (Geo Zone Dedup + Cache 1hr) (Phase 3F)</p>
                 <div class="param-row">
                     <span class="param-label">source</span>
                     <select class="param-input" id="batchAirSource" onchange="onBatchAirSourceChange()">
-                        <option value="my_devices" selected>my_devices (devices ของฉัน)</option>
-                        <option value="public">public (ทุก device ที่มี lat/lng)</option>
+                        <option value="my_devices" selected>my_devices (my devices)</option>
+                        <option value="public">public (all devices with lat/lng)</option>
                     </select>
                 </div>
                 <div class="checkbox-row" style="padding-top:8px; display:none;" id="batchPublicOnlyRow">
                     <input type="checkbox" id="batchPublicOnly" checked />
-                    <label for="batchPublicOnly">public_only (filter เฉพาะ is_public=true)</label>
+                    <label for="batchPublicOnly">public_only (filter only is_public=true)</label>
                 </div>
                 <div id="outputOutdoorAirBatch"></div>
             </div>
@@ -1168,7 +1169,7 @@
         <div class="dm-section">
             <div class="dm-section-title">
                 <span class="section-tag tag-thai-air">&#127758; Thai Air Quality (Nationwide)</span>
-                <span style="font-size:12px; color:var(--text-dim); font-weight:400;">245 สถานี — ไม่ต้อง Login</span>
+                <span style="font-size:12px; color:var(--text-dim); font-weight:400;">245 stations — No Login Required</span>
             </div>
 
             <!-- Card 11: Thai Air Latest (v_thai_air_latest) -->
@@ -1183,18 +1184,18 @@
                     </button>
                 </div>
                 <div class="api-card-body">
-                    <p>ดึงข้อมูลล่าสุดจาก 245 สถานีทั่วไทย (Air4Thai + CUSense) พร้อม aqi_level</p>
+                    <p>Fetch latest data from 245 stations across Thailand (Air4Thai + CUSense) with aqi_level</p>
                     <div class="param-row">
                         <span class="param-label">filter</span>
                         <select class="param-input" id="thaiAirFilter" onchange="onThaiAirFilterChange()">
-                            <option value="all" selected>ทุกสถานี (245)</option>
-                            <option value="province">เฉพาะจังหวัด</option>
+                            <option value="all" selected>All stations (245)</option>
+                            <option value="province">By province</option>
                             <option value="unhealthy">PM2.5 > 37.5 (unhealthy+)</option>
                         </select>
                     </div>
                     <div class="param-row hidden" id="thaiAirProvinceRow">
                         <span class="param-label">province</span>
-                        <input type="text" class="param-input" id="thaiAirProvince" placeholder="เช่น อุดรธานี, กรุงเทพมหานคร" />
+                        <input type="text" class="param-input" id="thaiAirProvince" placeholder="e.g. Udon Thani, Bangkok" />
                     </div>
                     <div id="outputThaiAirLatest"></div>
                 </div>
@@ -1212,20 +1213,58 @@
                     </button>
                 </div>
                 <div class="api-card-body">
-                    <p>ดึงประวัติรายชั่วโมงของสถานีเดียว (สำหรับกราฟ)</p>
+                    <p>Fetch hourly history for a single station (for charting)</p>
                     <div class="param-row">
                         <span class="param-label">station_id</span>
-                        <input type="number" class="param-input" id="thaiAirStationId" placeholder="เช่น 1 (ได้จากผลลัพธ์ v_thai_air_latest)" />
+                        <input type="number" class="param-input" id="thaiAirStationId" placeholder="e.g. 1 (from v_thai_air_latest results)" />
                     </div>
                     <div class="param-row">
                         <span class="param-label">limit</span>
                         <select class="param-input" id="thaiAirLimit">
-                            <option value="24" selected>24 ชั่วโมง</option>
-                            <option value="48">48 ชั่วโมง</option>
-                            <option value="168">7 วัน (168 ชม.)</option>
+                            <option value="24" selected>24 hours</option>
+                            <option value="48">48 hours</option>
+                            <option value="168">7 days (168 hrs)</option>
                         </select>
                     </div>
                     <div id="outputThaiAirHistory"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== Section: AQICN Air Quality (Worldwide — No Login Required) ===== -->
+    <div id="aqicnSection">
+        <div class="divider"></div>
+
+        <div class="dm-section">
+            <div class="dm-section-title">
+                <span class="section-tag tag-aqicn">&#127760; AQICN Stations (Worldwide)</span>
+                <span style="font-size:12px; color:var(--text-dim); font-weight:400;">~470 stations via cron — No Login Required</span>
+            </div>
+
+            <!-- Card 13: aqicn_stations REST API -->
+            <div class="api-card">
+                <div class="api-card-header">
+                    <h3>
+                        <span class="method-badge method-rpc">REST</span>
+                        aqicn_stations
+                    </h3>
+                    <button class="btn btn-primary btn-sm" onclick="testAqicnStations()" id="btnAqicnStations">
+                        &#9654; Run
+                    </button>
+                </div>
+                <div class="api-card-body">
+                    <p>Fetch cached AQICN station data (updated hourly via pg_cron). Shows station count, top AQI station, and data freshness.</p>
+                    <div class="param-row">
+                        <span class="param-label">filter</span>
+                        <select class="param-input" id="aqicnFilter">
+                            <option value="all" selected>All stations (with AQI)</option>
+                            <option value="top10">Top 10 highest AQI</option>
+                            <option value="healthy">AQI &le; 50 (Good)</option>
+                            <option value="unhealthy">AQI &gt; 100 (Unhealthy+)</option>
+                        </select>
+                    </div>
+                    <div id="outputAqicnStations"></div>
                 </div>
             </div>
         </div>
@@ -2173,7 +2212,7 @@ async function testAirQualityMap() {
 }
 
 // ============================================================
-// Test 8: get_public_air_quality (Phase 3D + 3F: เพิ่ม public_only filter)
+// Test 8: get_public_air_quality (Phase 3D + 3F: added public_only filter)
 // ============================================================
 async function testPublicAirQuality() {
     if (!await ensureSession()) return;
@@ -2226,7 +2265,7 @@ async function testOutdoorAir() {
         return;
     }
 
-    // สร้าง request body ตาม mode
+    // Build request body based on mode
     var mode = document.getElementById('outdoorAirMode').value;
     var body = {};
 
@@ -2263,7 +2302,7 @@ async function testOutdoorAir() {
             var d = result.data;
             var aqiInfo = getAqiInfo(d.aqi);
 
-            // สร้าง summary object สำหรับแสดงผล
+            // Build summary object for display
             var summary = {
                 aqi: d.aqi + ' (' + aqiInfo.level + ')',
                 pm25: d.pm25 != null ? d.pm25 + ' ug/m3' : 'N/A',
@@ -2297,7 +2336,7 @@ async function testOutdoorAir() {
 // ============================================================
 function onBatchAirSourceChange() {
     var source = document.getElementById('batchAirSource').value;
-    // แสดง public_only checkbox เฉพาะ mode "public"
+    // Show public_only checkbox only for "public" mode
     var row = document.getElementById('batchPublicOnlyRow');
     if (source === 'public') {
         row.style.display = 'flex';
@@ -2320,7 +2359,7 @@ async function testOutdoorAirBatch() {
     var source = document.getElementById('batchAirSource').value;
     var body = { source: source };
 
-    // เพิ่ม public_only เฉพาะ mode "public"
+    // Add public_only only for "public" mode
     if (source === 'public') {
         body.public_only = document.getElementById('batchPublicOnly').checked;
     }
@@ -2339,7 +2378,7 @@ async function testOutdoorAirBatch() {
         var result = await res.json();
 
         if (res.ok && result.success) {
-            // สร้าง summary แสดงภาพรวม
+            // Build summary for overview
             var summary = {
                 source: result.source,
                 public_only: result.public_only,
@@ -2350,7 +2389,7 @@ async function testOutdoorAirBatch() {
                 errors: result.summary.errors,
             };
 
-            // เพิ่ม device list สรุปสั้นๆ
+            // Add brief device list summary
             if (result.results && result.results.length > 0) {
                 summary.devices = result.results.map(function(r) {
                     var aqiInfo = getAqiInfo(r.data ? r.data.aqi : null);
@@ -2399,7 +2438,7 @@ async function testThaiAirLatest() {
         if (filter === 'province') {
             var province = document.getElementById('thaiAirProvince').value.trim();
             if (!province) {
-                createOutput('outputThaiAirLatest', 'err', 'Validation Error', '0ms', 'กรุณาระบุชื่อจังหวัด');
+                createOutput('outputThaiAirLatest', 'err', 'Validation Error', '0ms', 'Please enter a province name');
                 return;
             }
             query = query.ilike('province', '%' + province + '%');
@@ -2415,19 +2454,19 @@ async function testThaiAirLatest() {
             return;
         }
 
-        // สร้าง summary
+        // Build summary
         var summary = {
             total_stations: data.length,
             filter: filter,
         };
 
         if (data.length > 0) {
-            // นับแยก source
+            // Count by source
             var air4thai = data.filter(function(s) { return s.source === 'air4thai'; }).length;
             var cusense = data.filter(function(s) { return s.source === 'cusense'; }).length;
             summary.sources = { air4thai: air4thai, cusense: cusense };
 
-            // นับ aqi_level
+            // Count by aqi_level
             var levels = {};
             data.forEach(function(s) {
                 var lv = s.aqi_level || 'unknown';
@@ -2435,7 +2474,7 @@ async function testThaiAirLatest() {
             });
             summary.aqi_levels = levels;
 
-            // แสดง top 5 ฝุ่นสูงสุด
+            // Show top 5 highest PM2.5
             var sorted = data.filter(function(s) { return s.pm25 != null; })
                 .sort(function(a, b) { return (b.pm25 || 0) - (a.pm25 || 0); });
             summary.top5_pm25 = sorted.slice(0, 5).map(function(s) {
@@ -2448,7 +2487,7 @@ async function testThaiAirLatest() {
                 };
             });
 
-            // แสดง data age
+            // Show data age
             if (data[0].fetched_at) {
                 var ageMin = Math.round((Date.now() - new Date(data[0].fetched_at).getTime()) / 60000);
                 summary.data_age_minutes = ageMin;
@@ -2474,7 +2513,7 @@ async function testThaiAirHistory() {
 
     if (!stationId) {
         createOutput('outputThaiAirHistory', 'err', 'Validation Error', '0ms',
-            'กรุณาระบุ station_id (ดูได้จากผลลัพธ์ v_thai_air_latest)');
+            'Please enter a station_id (see v_thai_air_latest results)');
         return;
     }
 
@@ -2526,6 +2565,90 @@ async function testThaiAirHistory() {
     } catch (err) {
         var elapsed = Math.round(performance.now() - start);
         createOutput('outputThaiAirHistory', 'err', 'Network Error', formatTime(elapsed), err.message);
+    }
+}
+
+// ============================================================
+// AQICN Stations: Test aqicn_stations REST API (Card 13)
+// No login required — uses anon key
+// ============================================================
+async function testAqicnStations() {
+    showLoading('outputAqicnStations');
+    var start = performance.now();
+    var filter = document.getElementById('aqicnFilter').value;
+
+    try {
+        var query = sb.from('aqicn_stations')
+            .select('uid,station_name,latitude,longitude,aqi,measured_at,fetched_at')
+            .not('aqi', 'is', null);
+
+        if (filter === 'top10') {
+            query = query.order('aqi', { ascending: false }).limit(10);
+        } else if (filter === 'healthy') {
+            query = query.lte('aqi', 50).order('aqi', { ascending: true });
+        } else if (filter === 'unhealthy') {
+            query = query.gt('aqi', 100).order('aqi', { ascending: false });
+        }
+
+        var { data, error } = await query;
+        var elapsed = Math.round(performance.now() - start);
+
+        if (error) {
+            createOutput('outputAqicnStations', 'err', 'Error: ' + error.code, formatTime(elapsed), error.message);
+            return;
+        }
+
+        // Build summary
+        var summary = {
+            total_stations: data.length,
+            filter: filter,
+        };
+
+        if (data.length > 0) {
+            // AQI distribution
+            var dist = { good: 0, moderate: 0, sensitive: 0, unhealthy: 0, hazardous: 0 };
+            data.forEach(function(s) {
+                var a = s.aqi;
+                if (a <= 50) dist.good++;
+                else if (a <= 100) dist.moderate++;
+                else if (a <= 150) dist.sensitive++;
+                else if (a <= 200) dist.unhealthy++;
+                else dist.hazardous++;
+            });
+            summary.aqi_distribution = dist;
+
+            // Top station (highest AQI)
+            var sorted = data.slice().sort(function(a, b) { return (b.aqi || 0) - (a.aqi || 0); });
+            summary.top_aqi_station = {
+                station_name: sorted[0].station_name,
+                aqi: sorted[0].aqi,
+                uid: sorted[0].uid,
+                latitude: sorted[0].latitude,
+                longitude: sorted[0].longitude,
+            };
+
+            // Top 5 highest AQI
+            summary.top5_aqi = sorted.slice(0, 5).map(function(s) {
+                return {
+                    station_name: s.station_name,
+                    aqi: s.aqi,
+                    measured_at: s.measured_at,
+                };
+            });
+
+            // Data freshness
+            if (data[0].fetched_at) {
+                var ageMin = Math.round((Date.now() - new Date(data[0].fetched_at).getTime()) / 60000);
+                summary.data_age_minutes = ageMin;
+                summary.freshness = ageMin <= 90 ? 'FRESH (within cron interval)' : 'STALE (check cron job)';
+            }
+        }
+
+        var statusText = '200 OK \u2014 ' + data.length + ' stations';
+        createOutput('outputAqicnStations', 'ok', statusText, formatTime(elapsed), summary);
+    } catch (err) {
+        var elapsed = Math.round(performance.now() - start);
+        createOutput('outputAqicnStations', 'err', 'Network Error', formatTime(elapsed), err.message);
     }
 }
 
@@ -2722,8 +2845,8 @@ function renderProfileView(data) {
     var displayName = data.display_name ? sanitizeHTML(data.display_name) : '<span class="empty">Not set</span>';
     var phone = data.phone ? sanitizeHTML(data.phone) : '<span class="empty">Not set</span>';
     var address = data.address ? sanitizeHTML(data.address) : '<span class="empty">Not set</span>';
-    var created = data.created_at ? new Date(data.created_at).toLocaleString('th-TH') : '-';
-    var updated = data.updated_at ? new Date(data.updated_at).toLocaleString('th-TH') : '-';
+    var created = data.created_at ? new Date(data.created_at).toLocaleString('en-US') : '-';
+    var updated = data.updated_at ? new Date(data.updated_at).toLocaleString('en-US') : '-';
 
     var html = '<div class="profile-info">';
     html += '<div class="profile-row">';
