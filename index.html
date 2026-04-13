@@ -220,6 +220,7 @@
         }
         .method-rpc { background: var(--green-dim); color: var(--green); }
         .method-edge { background: var(--amber-dim); color: var(--amber); }
+        .method-deprecated { background: var(--red-dim); color: var(--red); margin-left: 6px; }
 
         .api-card-body {
             padding: 16px 20px;
@@ -1096,11 +1097,12 @@
             </div>
         </div>
 
-        <!-- Card 9: get-outdoor-air Edge Function (Phase 3E R4) -->
-        <div class="api-card">
+        <!-- Card 9: get-outdoor-air Edge Function (Phase 3E R4) — DEPRECATED -->
+        <div class="api-card" style="opacity:0.7">
             <div class="api-card-header">
                 <h3>
                     <span class="method-badge method-edge">EDGE</span>
+                    <span class="method-badge method-deprecated">⚠ DEPRECATED</span>
                     get-outdoor-air
                 </h3>
                 <button class="btn btn-primary btn-sm" onclick="testOutdoorAir()" id="btnOutdoorAir">
@@ -1108,6 +1110,7 @@
                 </button>
             </div>
             <div class="api-card-body">
+                <p style="color:var(--red);font-size:12px;margin-bottom:8px">⚠ Deprecated since v1.5 — ใช้ <code>aqicn_stations</code> REST API แทน (ไม่ต้อง login, 470 สถานี, อัปเดตทุก 1 ชม.)</p>
                 <p>Get outdoor air quality from AQICN via Edge Function (Proxy + Geo Zone Cache 1hr)</p>
                 <div class="param-row">
                     <span class="param-label">mode</span>
@@ -1128,11 +1131,12 @@
             </div>
         </div>
 
-        <!-- Card 10: get-outdoor-air-batch Edge Function (Phase 3F) -->
-        <div class="api-card">
+        <!-- Card 10: get-outdoor-air-batch Edge Function (Phase 3F) — DEPRECATED -->
+        <div class="api-card" style="opacity:0.7">
             <div class="api-card-header">
                 <h3>
                     <span class="method-badge method-edge">EDGE</span>
+                    <span class="method-badge method-deprecated">⚠ DEPRECATED</span>
                     get-outdoor-air-batch
                 </h3>
                 <button class="btn btn-primary btn-sm" onclick="testOutdoorAirBatch()" id="btnOutdoorAirBatch">
@@ -1140,6 +1144,7 @@
                 </button>
             </div>
             <div class="api-card-body">
+                <p style="color:var(--red);font-size:12px;margin-bottom:8px">⚠ Deprecated since v1.5 — ใช้ <code>aqicn_stations</code> REST API แทน (ไม่ต้อง login, 470 สถานี, อัปเดตทุก 1 ชม.)</p>
                 <p>Batch outdoor AQI for multiple devices via AQICN (Geo Zone Dedup + Cache 1hr) (Phase 3F)</p>
                 <div class="param-row">
                     <span class="param-label">source</span>
