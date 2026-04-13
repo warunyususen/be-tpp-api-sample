@@ -1,7 +1,7 @@
 # BE-TPP API Documentation
 
-**Version:** 1.4
-**Last Updated:** 10 April 2026
+**Version:** 1.5
+**Last Updated:** 13 April 2026
 **Project:** BE-TPP IoT (Breatheeasy Total Positive Pressure)
 
 ---
@@ -32,8 +32,9 @@
    - 9.1 [Get Profile](#91-get-profile)
    - 9.2 [Update Profile](#92-update-profile)
 10. [API Functions  --  Outdoor Air Quality](#10-api-functions--outdoor-air-quality)
-    - 10.1 [get-outdoor-air (Edge Function)](#101-get-outdoor-air-edge-function)
-    - 10.2 [get-outdoor-air-batch (Edge Function)](#102-get-outdoor-air-batch-edge-function)
+    - 10.1 [get-outdoor-air (Edge Function) ⚠ DEPRECATED](#101-get-outdoor-air-edge-function)
+    - 10.2 [get-outdoor-air-batch (Edge Function) ⚠ DEPRECATED](#102-get-outdoor-air-batch-edge-function)
+    - 10.3 [aqicn_stations (REST Query) ★ NEW](#103-aqicn_stations-rest-query)
 11. [API Functions  --  Thai Air Quality (Nationwide)](#11-api-functions--thai-air-quality-nationwide)
     - 11.1 [v_thai_air_latest (View — REST Query)](#111-v_thai_air_latest-view--rest-query)
     - 11.2 [thai_air_readings (History — REST Query)](#112-thai_air_readings-history--rest-query)
@@ -64,7 +65,8 @@ ESP32 Devices --MQTT--> EMQX Cloud --REST--> Supabase PostgreSQL
                                     +---------------+---------------+
                                     |               |               |
                               Web Dashboard   AQICN API     Air4Thai + CUSense
-                                          (per device)    (245 stations, pg_cron 1hr)
+                                          (map/bounds,    (245 stations,
+                                           pg_cron 1hr)    pg_cron 1hr)
 ```
 
 ### Tech Stack
@@ -1319,6 +1321,17 @@ const { data, error } = await supabase
 
 ## 10. API Functions - Outdoor Air Quality
 
+> **⚠ DEPRECATION NOTICE (v1.5, 13 Apr 2026)**
+>
+> `get-outdoor-air` (Section 10.1) and `get-outdoor-air-batch` (Section 10.2) are **deprecated**.
+> These per-device Edge Functions will continue to function but are no longer recommended.
+>
+> **Replacement:** Use `aqicn_stations` REST API (Section 10.3) which provides pre-fetched
+> AQICN data for 470 stations nationwide, updated every hour via pg_cron.
+> Use `haversine()` on the client side to find the nearest station.
+>
+> See **Migration Guide** (`BE-TPP_Migration_Guide_aqicn_stations.md`) for transition details.
+
 ### 10.1 get-outdoor-air (Edge Function)
 
 Retrieves outdoor air quality data from the AQICN API via a backend proxy. Uses geo zone caching (1 hour) to minimize API calls. Accepts either a `device_id` (uses device's registered coordinates) or explicit `latitude`/`longitude`.
@@ -1329,7 +1342,7 @@ Retrieves outdoor air quality data from the AQICN API via a backend proxy. Uses 
 | **Auth**        | Required (Bearer token)            |
 | **Cache**       | Geo zone cache, 1 hour TTL         |
 | **Data Source**  | AQICN (World Air Quality Index)   |
-| **Status**      | Active (deployed 27 Mar 2026)      |
+| **Status**      | ⚠ **DEPRECATED** (since v1.5, 13 Apr 2026) — Use `aqicn_stations` REST API instead |
 
 #### Endpoint
 
@@ -1502,7 +1515,7 @@ Retrieves outdoor air quality data from the AQICN API for **multiple devices** i
 | **Data Source**  | AQICN (World Air Quality Index)   |
 | **Limits**      | Max 100 devices, max 50 unique zones |
 | **AQICN Calls** | Sequential (not parallel)          |
-| **Status**      | Active (deployed 6 Apr 2026)       |
+| **Status**      | ⚠ **DEPRECATED** (since v1.5, 13 Apr 2026) — Use `aqicn_stations` REST API instead |
 
 #### Endpoint
 
@@ -1686,6 +1699,158 @@ Example: 10 devices in 4 unique zones = max 4 AQICN API calls (not 10).
 | 500       | `Internal server error`                                      | Unexpected error                         |
 
 > **Note:** Individual zone errors (e.g. AQICN API failure) do not cause the entire request to fail. Instead, affected devices will have an `error` field in their result while other devices return normally.
+
+---
+
+### 10.3 aqicn_stations (REST Query) ★ NEW
+
+Pre-fetched AQICN air quality data for ~470 stations across Thailand and neighboring countries. Updated automatically every hour by the `fetch-aqicn-map` Edge Function via pg_cron. This is the **recommended replacement** for `get-outdoor-air` and `get-outdoor-air-batch`.
+
+| Property        | Value                              |
+|-----------------|------------------------------------|
+| **Type**        | Supabase REST API (HTTP GET)       |
+| **Auth**        | anon key (no login required)       |
+| **Data Source**  | AQICN map/bounds API              |
+| **Update**      | pg_cron every hour (:30)           |
+| **Status**      | ✅ Active (deployed 13 Apr 2026)   |
+
+#### Endpoint
+
+```
+GET https://brgzimwzcfbwkgymqzvy.supabase.co/rest/v1/aqicn_stations?select=uid,station_name,latitude,longitude,aqi,measured_at,fetched_at&aqi=not.is.null
+```
+
+#### Headers
+
+```
+apikey: <SUPABASE_ANON_KEY>
+```
+
+#### Response (Array of Objects)
+
+| Field            | Type        | Description                                    |
+|------------------|-------------|------------------------------------------------|
+| `uid`            | TEXT        | AQICN station unique ID (e.g. "@1234")         |
+| `station_name`   | TEXT        | Station display name                           |
+| `latitude`       | REAL        | GPS latitude                                   |
+| `longitude`      | REAL        | GPS longitude                                  |
+| `aqi`            | INTEGER     | AQI index (US EPA standard)                    |
+| `measured_at`    | TIMESTAMPTZ | When station last reported                     |
+| `fetched_at`     | TIMESTAMPTZ | When our system fetched the data               |
+
+#### Example Response
+
+```json
+[
+  {
+    "uid": "@7397",
+    "station_name": "Bangkok US Embassy",
+    "latitude": 13.7563,
+    "longitude": 100.5018,
+    "aqi": 78,
+    "measured_at": "2026-04-13T07:00:00+00:00",
+    "fetched_at": "2026-04-13T07:30:12+00:00"
+  },
+  {
+    "uid": "@10570",
+    "station_name": "Chiang Mai",
+    "latitude": 18.7883,
+    "longitude": 98.9853,
+    "aqi": 152,
+    "measured_at": "2026-04-13T07:00:00+00:00",
+    "fetched_at": "2026-04-13T07:30:12+00:00"
+  }
+]
+```
+
+#### Usage Notes
+
+- Returns ~446 stations (those with non-null AQI out of ~470 total)
+- Response size: ~53 KB — can be cached in client memory
+- No login required — public data readable by anon key
+- AQI is US EPA standard — use `aqiToPm25()` to convert to PM2.5 µg/m³ (approximate ±10%)
+- Use `haversine()` on client side to find nearest station to a device
+- Data freshness: updated every hour at :30 by pg_cron
+
+#### Client-side Helper Functions
+
+```javascript
+// haversine — คำนวณระยะทาง (km)
+function haversine(lat1, lon1, lat2, lon2) {
+  var R = 6371, toRad = Math.PI / 180;
+  var dLat = (lat2 - lat1) * toRad, dLon = (lon2 - lon1) * toRad;
+  var a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+          Math.cos(lat1 * toRad) * Math.cos(lat2 * toRad) *
+          Math.sin(dLon/2) * Math.sin(dLon/2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// aqiToPm25 — แปลง AQI → PM2.5 µg/m³ (ค่าประมาณ)
+function aqiToPm25(aqi) {
+  if (aqi == null) return null;
+  var bp = [
+    [0, 50, 0, 12.0], [51, 100, 12.1, 35.4], [101, 150, 35.5, 55.4],
+    [151, 200, 55.5, 150.4], [201, 300, 150.5, 250.4], [301, 500, 250.5, 500.4]
+  ];
+  for (var i = 0; i < bp.length; i++) {
+    var b = bp[i];
+    if (aqi >= b[0] && aqi <= b[1]) {
+      return Math.round(((aqi - b[0]) / (b[1] - b[0]) * (b[3] - b[2]) + b[2]) * 10) / 10;
+    }
+  }
+  return aqi > 500 ? 500.4 : null;
+}
+```
+
+#### Migration from get-outdoor-air
+
+**ก่อน (get-outdoor-air):**
+```javascript
+const { data } = await supabase.functions.invoke('get-outdoor-air', {
+  body: { device_id: 'xxx' }
+});
+// Returns: aqi, pm25, pm10, temperature, humidity, wind, station_name
+```
+
+**หลัง (aqicn_stations):**
+```javascript
+// ไม่ต้อง login — ใช้ anon key
+const { data: stations } = await supabase
+  .from('aqicn_stations')
+  .select('uid,station_name,latitude,longitude,aqi,measured_at,fetched_at')
+  .not('aqi', 'is', null);
+
+// หาสถานีใกล้สุดจาก device
+const nearest = findNearestStation(deviceLat, deviceLng, stations);
+if (nearest && nearest.distance <= 50) {
+  const aqi = nearest.station.aqi;
+  const pm25 = aqiToPm25(aqi);  // ≈ ค่าประมาณ
+}
+```
+
+**สิ่งที่เปลี่ยน:**
+
+| รายการ | ก่อน | หลัง |
+|--------|------|------|
+| Auth | Bearer token (ต้อง login) | anon key (ไม่ต้อง login) |
+| API call | 1 call ต่อ device | 1 call ได้ทุกสถานี |
+| Nearest station | Backend คำนวณ (geo_zone) | Frontend คำนวณ (haversine) |
+| ข้อมูลที่ได้ | AQI, PM2.5, PM10, Temp, Humid, Wind | AQI เท่านั้น (PM2.5 ต้อง aqiToPm25) |
+| ความสด | Cache 1 ชม. (may older) | pg_cron ทุก 1 ชม. (:30) |
+
+**ข้อมูลที่หาย (ไม่ critical):**
+- Temperature, Humidity, Wind → ใช้ Thai Air (CUSense) แทนได้ (มี Temp, Humidity)
+- PM2.5 ค่าจริง → ใช้ `aqiToPm25()` แปลงจาก AQI (ค่าประมาณ ±10%)
+- PM10, O3, NO2, SO2, CO → ไม่มีจาก map/bounds API
+
+**Timeline:**
+
+| วันที่ | สถานะ |
+|--------|-------|
+| 13 เม.ย. 2026 | aqicn_stations พร้อมใช้ + API Doc v1.5 |
+| — | ทีมแอปเริ่ม migration |
+| +30 วัน (ประมาณ) | ตรวจสอบว่าทุกคนเปลี่ยนแล้ว |
+| +60 วัน (ประมาณ) | ลบ get-outdoor-air + get-outdoor-air-batch |
 
 ---
 
@@ -2038,6 +2203,28 @@ curl -X POST 'https://brgzimwzcfbwkgymqzvy.supabase.co/functions/v1/fetch-thai-a
 
 > **Note:** This table acts as a geo zone cache for the AQICN API. The `get-outdoor-air` Edge Function inserts rows using the service role key. Data is retained for 180 days (pg_cron cleanup).
 
+### Table: aqicn_stations ★ NEW
+
+| Column              | Type        | Nullable | Default | Description                          |
+|---------------------|-------------|----------|---------|--------------------------------------|
+| `uid`               | TEXT (PK)   | No       |  --     | AQICN station unique ID              |
+| `station_name`      | TEXT        | Yes      |  --     | Station display name                 |
+| `latitude`          | REAL        | Yes      |  --     | GPS latitude                         |
+| `longitude`         | REAL        | Yes      |  --     | GPS longitude                        |
+| `aqi`               | INTEGER     | Yes      |  --     | AQI index (US EPA)                   |
+| `dominant_pollutant`| TEXT        | Yes      |  --     | Primary pollutant                    |
+| `measured_at`       | TIMESTAMPTZ | Yes      |  --     | When station last reported           |
+| `fetched_at`        | TIMESTAMPTZ | No       | NOW()   | When our system fetched the data     |
+| `raw_json`          | JSONB       | Yes      |  --     | Raw AQICN API response               |
+
+**Indexes:**
+- Primary key: `uid`
+- `idx_aqicn_stations_aqi` on `(aqi)` — filter NULL AQI
+- `idx_aqicn_stations_geo` on `(latitude, longitude)` — geo queries
+- `idx_aqicn_stations_measured` on `(measured_at)` — freshness check
+
+> **Note:** Data is UPSERT every hour by `fetch-aqicn-map` Edge Function (pg_cron job #7). No historical data retained — always shows latest snapshot. ~470 rows total.
+
 ### Table: thai_air_stations
 
 | Column              | Type         | Nullable | Default | Description                          |
@@ -2152,6 +2339,15 @@ Row Level Security (RLS) is enabled on all five tables. All policies use the `(s
 
 > **Note:** The INSERT policies with `true` are intentional  - EMQX Cloud uses the Supabase service role key to insert sensor/status data, and the `get-outdoor-air` Edge Function uses the service role key to insert outdoor air cache data. These rows have no user context. The `SECURITY DEFINER` functions handle ownership checks independently.
 
+### aqicn_stations (2 Policies) ★ NEW
+
+| Policy                              | Operation | Rule                                                   |
+|-------------------------------------|-----------|--------------------------------------------------------|
+| aqicn_stations_read_anon            | SELECT    | `true` (public data, readable by anon key)             |
+| aqicn_stations_read_authenticated   | SELECT    | `true` (public data, readable by authenticated users)  |
+
+> **Note:** AQICN station data is fully public. Write access is restricted to service_role (used by `fetch-aqicn-map` via pg_cron). No Security/Performance Advisor warnings.
+
 ### thai_air_stations (2 Policies)
 
 | Policy                              | Operation | Rule                                                   |
@@ -2231,10 +2427,12 @@ Row Level Security (RLS) is enabled on all five tables. All policies use the `(s
 
 | Constraint          | Value                  | Notes                                        |
 |---------------------|------------------------|----------------------------------------------|
-| Free tier           | ~1,000 requests/day    | Shared across all Edge Function calls (get-outdoor-air + get-outdoor-air-batch) |
-| Geo zone cache      | 1 hour TTL             | Same geo_zone reuses cached data             |
-| Estimated usage     | ~240-600 calls/day     | Based on 50-100 unique geo zones, 1hr cache  |
-| Batch dedup         | Per request            | Devices in same ~1.1 km zone share one AQICN call |
+| Free tier           | ~1,000 requests/day    | Shared across all AQICN API calls            |
+| fetch-aqicn-map     | 24 req/day             | pg_cron every hour (:30) — **primary**       |
+| get-outdoor-air     | ~50 req/day (declining)| ⚠ DEPRECATED — ทีมแอปกำลังเปลี่ยน           |
+| get-outdoor-air-batch| ~0-10 req/day         | ⚠ DEPRECATED — ทีมแอปกำลังเปลี่ยน           |
+| Total estimated     | ~74 req/day            | Well within 1,000 limit                      |
+| Post-migration      | ~24 req/day            | After all clients switch to aqicn_stations   |
 
 ### Supabase Free Tier Limits
 
@@ -2263,6 +2461,7 @@ Row Level Security (RLS) is enabled on all five tables. All policies use the `(s
 *This document is part of the BE-TPP Handoff Package for Phase 4 (Dashboard Development).*
 *For project status and architecture details, see `BE-TPP_Project_Status_v10.md`.*
 *For a live test console, visit: https://warunyususen.github.io/be-tpp-api-sample/*
+*Change from v1.4: Deprecated get-outdoor-air + get-outdoor-air-batch (Section 10.1-10.2), added aqicn_stations REST API (Section 10.3), added Migration Guide, added aqicn_stations DB schema + RLS policies, updated AQICN API Limits*
 *Change from v1.3: Added Section 11 (Thai Air Quality — v_thai_air_latest, thai_air_readings, fetch-thai-air), thai_air_stations/readings DB schema, RLS policies, retention 90 days, Thai Air rate limits*
 *Change from v1.2: Added Section 10.2 (get-outdoor-air-batch), updated Section 7.2 (get_public_air_quality p_public_only parameter)*
 *Change from v1.1: Added Section 10 (Outdoor Air Quality - AQICN Edge Function), outdoor_air_readings schema, RLS policies, AQICN rate limits*
