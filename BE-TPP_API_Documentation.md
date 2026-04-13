@@ -1775,7 +1775,7 @@ apikey: <SUPABASE_ANON_KEY>
 #### Client-side Helper Functions
 
 ```javascript
-// haversine — คำนวณระยะทาง (km)
+// haversine — calculate distance (km)
 function haversine(lat1, lon1, lat2, lon2) {
   var R = 6371, toRad = Math.PI / 180;
   var dLat = (lat2 - lat1) * toRad, dLon = (lon2 - lon1) * toRad;
@@ -1785,7 +1785,7 @@ function haversine(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-// aqiToPm25 — แปลง AQI → PM2.5 µg/m³ (ค่าประมาณ)
+// aqiToPm25 — convert AQI to PM2.5 µg/m³ (approximate)
 function aqiToPm25(aqi) {
   if (aqi == null) return null;
   var bp = [
@@ -1804,7 +1804,7 @@ function aqiToPm25(aqi) {
 
 #### Migration from get-outdoor-air
 
-**ก่อน (get-outdoor-air):**
+**Before (get-outdoor-air):**
 ```javascript
 const { data } = await supabase.functions.invoke('get-outdoor-air', {
   body: { device_id: 'xxx' }
@@ -1812,51 +1812,51 @@ const { data } = await supabase.functions.invoke('get-outdoor-air', {
 // Returns: aqi, pm25, pm10, temperature, humidity, wind, station_name
 ```
 
-**หลัง (aqicn_stations):**
+**After (aqicn_stations):**
 ```javascript
-// ไม่ต้อง login — ใช้ anon key
+// No login required — uses anon key
 const { data: stations } = await supabase
   .from('aqicn_stations')
   .select('uid,station_name,latitude,longitude,aqi,measured_at,fetched_at')
   .not('aqi', 'is', null);
 
-// หาสถานีใกล้สุดจาก device
+// Find the nearest station from the device
 const nearest = findNearestStation(deviceLat, deviceLng, stations);
 if (nearest && nearest.distance <= 50) {
   const aqi = nearest.station.aqi;
-  const pm25 = aqiToPm25(aqi);  // ≈ ค่าประมาณ
+  const pm25 = aqiToPm25(aqi);  // approximate value
 }
 ```
 
-**สิ่งที่เปลี่ยน:**
+**What changed:**
 
-| รายการ | ก่อน | หลัง |
-|--------|------|------|
-| Auth | Bearer token (ต้อง login) | anon key (ไม่ต้อง login) |
-| API call | 1 call ต่อ device | 1 call ได้ทุกสถานี |
-| Nearest station | Backend คำนวณ (geo_zone) | Frontend คำนวณ (haversine) |
-| ข้อมูลที่ได้ | AQI, PM2.5, PM10, Temp, Humid, Wind | AQI เท่านั้น (PM2.5 ต้อง aqiToPm25) |
-| ความสด | Cache 1 ชม. (may older) | pg_cron ทุก 1 ชม. (:30) |
+| Item | Before | After |
+|------|--------|-------|
+| Auth | Bearer token (login required) | anon key (no login required) |
+| API call | 1 call per device | 1 call returns all stations |
+| Nearest station | Backend calculates (geo_zone) | Frontend calculates (haversine) |
+| Data returned | AQI, PM2.5, PM10, Temp, Humidity, Wind | AQI only (PM2.5 requires aqiToPm25 conversion) |
+| Data freshness | Cache 1 hr (may be older) | pg_cron every 1 hr (:30) |
 
-**ข้อมูลที่หาย (ไม่ critical):**
-- Temperature, Humidity, Wind → ใช้ Thai Air (CUSense) แทนได้ (มี Temp, Humidity)
-- PM2.5 ค่าจริง → ใช้ `aqiToPm25()` แปลงจาก AQI (ค่าประมาณ ±10%)
-- PM10, O3, NO2, SO2, CO → ไม่มีจาก map/bounds API
+**Data no longer available (non-critical):**
+- Temperature, Humidity, Wind → can use Thai Air (CUSense) instead (provides Temp, Humidity)
+- Actual PM2.5 value → use `aqiToPm25()` to convert from AQI (approximate ±10%)
+- PM10, O3, NO2, SO2, CO → not available from map/bounds API
 
 **Timeline:**
 
-| วันที่ | สถานะ |
-|--------|-------|
-| 13 เม.ย. 2026 | aqicn_stations พร้อมใช้ + API Doc v1.5 |
-| — | ทีมแอปเริ่ม migration |
-| +30 วัน (ประมาณ) | ตรวจสอบว่าทุกคนเปลี่ยนแล้ว |
-| +60 วัน (ประมาณ) | ลบ get-outdoor-air + get-outdoor-air-batch |
+| Date | Status |
+|------|--------|
+| 13 Apr 2026 | aqicn_stations ready + API Doc v1.5 |
+| — | App team begins migration |
+| +30 days (approx.) | Verify all clients have switched |
+| +60 days (approx.) | Remove get-outdoor-air + get-outdoor-air-batch |
 
 ---
 
 ## 11. API Functions - Thai Air Quality (Nationwide)
 
-ข้อมูลคุณภาพอากาศทั่วประเทศไทย จาก 2 แหล่ง: **Air4Thai** (กรมควบคุมมลพิษ, 186 สถานี) + **CUSense** (จุฬาลงกรณ์, ~59 สถานี) รวม **245 สถานี** อัปเดตทุก 1 ชั่วโมง ผ่าน Edge Function `fetch-thai-air` (pg_cron)
+Nationwide air quality data for Thailand from 2 sources: **Air4Thai** (Pollution Control Department, 186 stations) + **CUSense** (Chulalongkorn University, ~59 stations), totalling **245 stations**. Updated every hour via the Edge Function `fetch-thai-air` (pg_cron).
 
 | Property        | Value                              |
 |-----------------|------------------------------------|
@@ -1869,8 +1869,8 @@ if (nearest && nearest.distance <= 50) {
 
 ### 11.1 v_thai_air_latest (View — REST Query)
 
-ดึงข้อมูลล่าสุดของทุกสถานี (JOIN stations + readings ล่าสุด + คำนวณ aqi_level)
-เป็น **public view** ไม่ต้อง login — ใช้ anon key ได้เลย
+Retrieves the latest data for all stations (JOIN stations + latest readings + calculated aqi_level).
+This is a **public view** — no login required, readable with the anon key.
 
 #### Endpoint
 
@@ -1887,16 +1887,16 @@ apikey: <SUPABASE_ANON_KEY>
 #### Filter Examples
 
 ```
-// ดึงทุกสถานี (245 rows)
+// Fetch all stations (245 rows)
 GET .../rest/v1/v_thai_air_latest?select=*
 
-// ดึงเฉพาะจังหวัด
+// Filter by province
 GET .../rest/v1/v_thai_air_latest?select=*&province=eq.อุดรธานี
 
-// ดึงเฉพาะ PM2.5 > 50 เรียงจากมากไปน้อย
+// Filter PM2.5 > 50, sorted descending
 GET .../rest/v1/v_thai_air_latest?select=*&pm25=gt.50&order=pm25.desc
 
-// ดึงเฉพาะ source
+// Filter by source
 GET .../rest/v1/v_thai_air_latest?select=*&source=eq.cusense
 ```
 
@@ -1973,19 +1973,19 @@ const { data, error } = await supabase
 
 #### AQI Level (Thai Standard — based on PM2.5)
 
-| aqi_level   | PM2.5 (µg/m³) | Color  | Meaning                      |
-|-------------|----------------|--------|------------------------------|
-| excellent   | 0 - 15.0       | Blue   | คุณภาพอากาศดีมาก            |
-| good        | 15.1 - 25.0    | Green  | คุณภาพอากาศดี                |
-| moderate    | 25.1 - 37.5    | Yellow | ปานกลาง                      |
-| unhealthy   | 37.6 - 75.0    | Orange | มีผลกระทบต่อสุขภาพ          |
-| hazardous   | > 75.0         | Red    | มีผลกระทบต่อสุขภาพมาก       |
+| aqi_level   | PM2.5 (µg/m³) | Color  | Meaning                       |
+|-------------|----------------|--------|-------------------------------|
+| excellent   | 0 - 15.0       | Blue   | Excellent air quality         |
+| good        | 15.1 - 25.0    | Green  | Good air quality              |
+| moderate    | 25.1 - 37.5    | Yellow | Moderate                      |
+| unhealthy   | 37.6 - 75.0    | Orange | Affects health                |
+| hazardous   | > 75.0         | Red    | Seriously affects health      |
 
 ---
 
 ### 11.2 thai_air_readings (History — REST Query)
 
-ดึงประวัติข้อมูลรายชั่วโมงของสถานีเดียว (สำหรับกราฟ)
+Retrieves hourly historical data for a single station (for charting purposes).
 
 #### Endpoint
 
@@ -2002,7 +2002,7 @@ apikey: <SUPABASE_ANON_KEY>
 #### Request Example (JavaScript)
 
 ```javascript
-// ดึง 24 ชั่วโมงล่าสุดของสถานี ID 1
+// Fetch the last 24 hours for station ID 1
 const { data, error } = await supabase
   .from('thai_air_readings')
   .select('*')
@@ -2037,13 +2037,13 @@ const { data, error } = await supabase
 
 ### 11.3 fetch-thai-air (Edge Function — Cron/Admin)
 
-Edge Function สำหรับดึงข้อมูลจาก Air4Thai + CUSense และ sync ลง DB ทำงานผ่าน pg_cron ทุก 1 ชั่วโมง (นาทีที่ 5) ไม่ได้ออกแบบให้ Frontend เรียกโดยตรง
+Edge Function for fetching data from Air4Thai + CUSense and syncing to the database. Runs via pg_cron every hour (at minute 5). Not designed to be called directly by the frontend.
 
 | Property        | Value                              |
 |-----------------|------------------------------------|
 | **Type**        | Supabase Edge Function (HTTP POST) |
 | **Auth**        | service_role key or valid user JWT |
-| **Schedule**    | pg_cron `5 * * * *` (ทุก 1 ชม.)  |
+| **Schedule**    | pg_cron `5 * * * *` (every hour)   |
 | **Performance** | ~2 seconds (batch operations)      |
 | **Status**      | Active (Round 3A — 10 Apr 2026)    |
 
@@ -2080,7 +2080,7 @@ curl -X POST 'https://brgzimwzcfbwkgymqzvy.supabase.co/functions/v1/fetch-thai-a
     "errors": []
   },
   "elapsed_ms": 1918,
-  "next_run": "ทุก 1 ชั่วโมง (pg_cron)"
+  "next_run": "Every hour (pg_cron)"
 }
 ```
 
@@ -2429,8 +2429,8 @@ Row Level Security (RLS) is enabled on all five tables. All policies use the `(s
 |---------------------|------------------------|----------------------------------------------|
 | Free tier           | ~1,000 requests/day    | Shared across all AQICN API calls            |
 | fetch-aqicn-map     | 24 req/day             | pg_cron every hour (:30) — **primary**       |
-| get-outdoor-air     | ~50 req/day (declining)| ⚠ DEPRECATED — ทีมแอปกำลังเปลี่ยน           |
-| get-outdoor-air-batch| ~0-10 req/day         | ⚠ DEPRECATED — ทีมแอปกำลังเปลี่ยน           |
+| get-outdoor-air     | ~50 req/day (declining)| ⚠ DEPRECATED — app team is migrating         |
+| get-outdoor-air-batch| ~0-10 req/day         | ⚠ DEPRECATED — app team is migrating         |
 | Total estimated     | ~74 req/day            | Well within 1,000 limit                      |
 | Post-migration      | ~24 req/day            | After all clients switch to aqicn_stations   |
 
