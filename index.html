@@ -478,6 +478,72 @@
             letter-spacing: 0;
         }
 
+        /* ===== Collapsible Section (Round 2: BEFF Location Info) ===== */
+        .collapsible-section {
+            margin-top: 12px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: var(--surface-2);
+        }
+        .collapsible-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 12px;
+            cursor: pointer;
+            user-select: none;
+            transition: background 0.15s;
+        }
+        .collapsible-header:hover {
+            background: var(--bg);
+        }
+        .collapsible-arrow {
+            font-size: 10px;
+            color: var(--text-dim);
+            transition: transform 0.2s;
+            display: inline-block;
+            width: 12px;
+        }
+        .collapsible-section.expanded .collapsible-arrow {
+            transform: rotate(90deg);
+        }
+        .collapsible-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text);
+            flex: 1;
+        }
+        .collapsible-badge {
+            font-size: 10px;
+            padding: 2px 8px;
+            border-radius: 10px;
+            background: var(--border);
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            font-weight: 500;
+        }
+        .collapsible-content {
+            display: none;
+            padding: 12px;
+            border-top: 1px solid var(--border);
+        }
+        .collapsible-section.expanded .collapsible-content {
+            display: block;
+        }
+        .collapsible-content .form-grid {
+            gap: 10px;
+        }
+        .collapsible-hint {
+            font-size: 11px;
+            color: var(--text-dim);
+            margin: 0 0 10px 0;
+            padding: 6px 8px;
+            background: var(--bg);
+            border-radius: 4px;
+            line-height: 1.4;
+        }
+
         /* ===== Modal ===== */
         .modal-overlay {
             position: fixed;
@@ -1362,6 +1428,51 @@
                             <label for="addIsPublic">Show on Air Quality Map (public)</label>
                         </div>
                     </div>
+                    <!-- Round 2: BEFF Location Info (Collapsible, Optional) -->
+                    <div class="collapsible-section" id="addLocationSection">
+                        <div class="collapsible-header" onclick="toggleCollapse('addLocationSection')">
+                            <span class="collapsible-arrow">&#9654;</span>
+                            <span class="collapsible-title">BEFF Location Info</span>
+                            <span class="collapsible-badge">Optional</span>
+                        </div>
+                        <div class="collapsible-content">
+                            <p class="collapsible-hint">สำหรับ BEFF locations ที่จะแสดงบน public map (TCDC, hotel, cafe, gym, ฯลฯ). เว้นว่างได้ถ้าเป็น private device.</p>
+                            <div class="form-grid">
+                                <div class="form-group full-width">
+                                    <label>Location Name</label>
+                                    <input type="text" id="addLocationName" placeholder="e.g. TCDC Chiang Mai" maxlength="100" />
+                                </div>
+                                <div class="form-group">
+                                    <label>Category</label>
+                                    <input type="text" id="addCategory" placeholder="e.g. Public Library" maxlength="50" />
+                                </div>
+                                <div class="form-group">
+                                    <label>Photo URL</label>
+                                    <input type="text" id="addPhotoUrl" placeholder="https://... or Supabase Storage URL" maxlength="500" />
+                                </div>
+                                <div class="form-group full-width">
+                                    <label>Address</label>
+                                    <input type="text" id="addAddress" placeholder="e.g. 1/1 Muang Samut Rd, Chiang Mai 50300" maxlength="200" />
+                                </div>
+                                <div class="form-group">
+                                    <label>Email</label>
+                                    <input type="text" id="addEmail" placeholder="e.g. tcdc@chiangmai.com" maxlength="100" />
+                                </div>
+                                <div class="form-group">
+                                    <label>Phone</label>
+                                    <input type="text" id="addPhone" placeholder="e.g. (66) 5 208 0500" maxlength="30" />
+                                </div>
+                                <div class="form-group">
+                                    <label>Website</label>
+                                    <input type="text" id="addWebsite" placeholder="e.g. tcdc.or.th" maxlength="100" />
+                                </div>
+                                <div class="form-group">
+                                    <label>Google Place ID</label>
+                                    <input type="text" id="addGooglePlaceId" placeholder="e.g. ChIJxxxxxxxxxx" maxlength="100" />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                     <div class="api-actions">
                         <button class="btn btn-green" onclick="addDevice()" id="btnAddDevice">
                             &#10133; Register Device
@@ -1416,6 +1527,51 @@
             <div class="checkbox-row">
                 <input type="checkbox" id="editIsPublic" />
                 <label for="editIsPublic">Show on Air Quality Map (public)</label>
+            </div>
+        </div>
+        <!-- Round 2: BEFF Location Info (Collapsible, Optional) -->
+        <div class="collapsible-section" id="editLocationSection" style="margin-top:16px;">
+            <div class="collapsible-header" onclick="toggleCollapse('editLocationSection')">
+                <span class="collapsible-arrow">&#9654;</span>
+                <span class="collapsible-title">BEFF Location Info</span>
+                <span class="collapsible-badge">Optional</span>
+            </div>
+            <div class="collapsible-content">
+                <p class="collapsible-hint">NULL = ไม่อัปเดต (retain existing). กรอกเฉพาะ fields ที่ต้องการแก้ไข.</p>
+                <div class="form-grid">
+                    <div class="form-group full-width">
+                        <label>Location Name</label>
+                        <input type="text" id="editLocationName" placeholder="e.g. TCDC Chiang Mai" maxlength="100" />
+                    </div>
+                    <div class="form-group">
+                        <label>Category</label>
+                        <input type="text" id="editCategory" placeholder="e.g. Public Library" maxlength="50" />
+                    </div>
+                    <div class="form-group">
+                        <label>Photo URL</label>
+                        <input type="text" id="editPhotoUrl" placeholder="https://..." maxlength="500" />
+                    </div>
+                    <div class="form-group full-width">
+                        <label>Address</label>
+                        <input type="text" id="editAddress" placeholder="Full address" maxlength="200" />
+                    </div>
+                    <div class="form-group">
+                        <label>Email</label>
+                        <input type="text" id="editEmail" placeholder="contact@example.com" maxlength="100" />
+                    </div>
+                    <div class="form-group">
+                        <label>Phone</label>
+                        <input type="text" id="editPhone" placeholder="(66) 5 208 0500" maxlength="30" />
+                    </div>
+                    <div class="form-group">
+                        <label>Website</label>
+                        <input type="text" id="editWebsite" placeholder="example.com" maxlength="100" />
+                    </div>
+                    <div class="form-group">
+                        <label>Google Place ID</label>
+                        <input type="text" id="editGooglePlaceId" placeholder="ChIJxxxxxxxxxx" maxlength="100" />
+                    </div>
+                </div>
             </div>
         </div>
         <div class="modal-actions">
@@ -2944,6 +3100,16 @@ async function saveProfile() {
 }
 
 // ============================================================
+// Round 2: Collapsible Section Toggle
+// ============================================================
+function toggleCollapse(sectionId) {
+    const section = document.getElementById(sectionId);
+    if (section) {
+        section.classList.toggle('expanded');
+    }
+}
+
+// ============================================================
 // Device Management: Add Device
 // ============================================================
 async function addDevice() {
@@ -2965,6 +3131,16 @@ async function addDevice() {
     const lng = document.getElementById('addLng').value ? parseFloat(document.getElementById('addLng').value) : null;
     const isPublic = document.getElementById('addIsPublic').checked;
 
+    // Round 2: BEFF location fields (optional, null if empty)
+    const locationName   = document.getElementById('addLocationName').value.trim()   || null;
+    const photoUrl       = document.getElementById('addPhotoUrl').value.trim()       || null;
+    const category       = document.getElementById('addCategory').value.trim()       || null;
+    const address        = document.getElementById('addAddress').value.trim()        || null;
+    const email          = document.getElementById('addEmail').value.trim()          || null;
+    const phone          = document.getElementById('addPhone').value.trim()          || null;
+    const website        = document.getElementById('addWebsite').value.trim()        || null;
+    const googlePlaceId  = document.getElementById('addGooglePlaceId').value.trim()  || null;
+
     const start = performance.now();
 
     const { data, error } = await sb.rpc('register_device', {
@@ -2972,7 +3148,15 @@ async function addDevice() {
         p_device_name: deviceName,
         p_latitude: lat,
         p_longitude: lng,
-        p_is_public: isPublic
+        p_is_public: isPublic,
+        p_location_name: locationName,
+        p_photo_url: photoUrl,
+        p_category: category,
+        p_address: address,
+        p_email: email,
+        p_phone: phone,
+        p_website: website,
+        p_google_place_id: googlePlaceId
     });
 
     const elapsed = Math.round(performance.now() - start);
@@ -2986,12 +3170,23 @@ async function addDevice() {
     } else {
         createOutput('outputAddDevice', 'ok', '200 OK', formatTime(elapsed), data);
         showToast('Device added!', 'success');
-        // Clear form
+        // Clear form (fields เดิม)
         document.getElementById('addDeviceId').value = '';
         document.getElementById('addDeviceName').value = '';
         document.getElementById('addLat').value = '';
         document.getElementById('addLng').value = '';
         document.getElementById('addIsPublic').checked = false;
+        // Clear form (Round 2: 8 BEFF location fields)
+        document.getElementById('addLocationName').value = '';
+        document.getElementById('addPhotoUrl').value = '';
+        document.getElementById('addCategory').value = '';
+        document.getElementById('addAddress').value = '';
+        document.getElementById('addEmail').value = '';
+        document.getElementById('addPhone').value = '';
+        document.getElementById('addWebsite').value = '';
+        document.getElementById('addGooglePlaceId').value = '';
+        // Collapse BEFF Location section หลัง register success
+        document.getElementById('addLocationSection').classList.remove('expanded');
         // Reload lists
         loadDevices();
         loadDeviceList();
@@ -3083,6 +3278,26 @@ async function openEditModal(deviceId) {
     document.getElementById('editLng').value = device.longitude || '';
     document.getElementById('editIsPublic').checked = device.is_public || false;
 
+    // Round 2: Pre-fill 8 BEFF location fields
+    document.getElementById('editLocationName').value   = device.location_name   || '';
+    document.getElementById('editPhotoUrl').value       = device.photo_url       || '';
+    document.getElementById('editCategory').value       = device.category        || '';
+    document.getElementById('editAddress').value        = device.address         || '';
+    document.getElementById('editEmail').value          = device.email           || '';
+    document.getElementById('editPhone').value          = device.phone           || '';
+    document.getElementById('editWebsite').value        = device.website         || '';
+    document.getElementById('editGooglePlaceId').value  = device.google_place_id || '';
+
+    // Auto-expand BEFF Location section ถ้ามีข้อมูลอย่างน้อย 1 field
+    const hasLocationData = !!(device.location_name || device.photo_url || device.category
+        || device.address || device.email || device.phone || device.website || device.google_place_id);
+    const locationSection = document.getElementById('editLocationSection');
+    if (hasLocationData) {
+        locationSection.classList.add('expanded');
+    } else {
+        locationSection.classList.remove('expanded');
+    }
+
     // Show modal
     document.getElementById('editModal').classList.add('active');
 }
@@ -3105,7 +3320,16 @@ async function saveDevice() {
         p_client_id: document.getElementById('editClientId').value.trim() || null,
         p_latitude: document.getElementById('editLat').value ? parseFloat(document.getElementById('editLat').value) : null,
         p_longitude: document.getElementById('editLng').value ? parseFloat(document.getElementById('editLng').value) : null,
-        p_is_public: document.getElementById('editIsPublic').checked
+        p_is_public: document.getElementById('editIsPublic').checked,
+        // Round 2: 8 BEFF location fields
+        p_location_name:   document.getElementById('editLocationName').value.trim()   || null,
+        p_photo_url:       document.getElementById('editPhotoUrl').value.trim()       || null,
+        p_category:        document.getElementById('editCategory').value.trim()       || null,
+        p_address:         document.getElementById('editAddress').value.trim()        || null,
+        p_email:           document.getElementById('editEmail').value.trim()          || null,
+        p_phone:           document.getElementById('editPhone').value.trim()          || null,
+        p_website:         document.getElementById('editWebsite').value.trim()        || null,
+        p_google_place_id: document.getElementById('editGooglePlaceId').value.trim()  || null
     };
 
     const { data, error } = await sb.rpc('update_device', params);
