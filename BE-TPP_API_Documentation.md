@@ -1,8 +1,18 @@
 # BE-TPP API Documentation
 
-**Version:** 1.5
-**Last Updated:** 13 April 2026
+**Version:** 1.6
+**Last Updated:** 17 April 2026
 **Project:** BE-TPP IoT (Breatheeasy Total Positive Pressure)
+
+**Changelog v1.6 (17 April 2026):**
+- [Section 6.1] `get_my_devices` — เพิ่ม 8 fields ใหม่ใน response (location_name, photo_url, category, address, email, phone, website, google_place_id)
+- [Section 6.2] `register_device` — เพิ่ม 8 optional params ใหม่ (all default NULL)
+- [Section 6.3] `update_device` — เพิ่ม 8 optional params ใหม่ (all default NULL, COALESCE pattern)
+- [Section 12] `user_devices` schema — เพิ่ม 8 columns ใหม่
+- [Section 12] เพิ่ม **Section 12.x Storage Buckets** (bucket `device-photos` + policies)
+- **[Section 7.2] `get_public_air_quality` — เพิ่ม 8 BEFF fields ใน response (v1.6 extension, 19 Apr 2026 via Round E migration). Privacy-gated: exposed only when is_public=TRUE. Also marked STABLE for query planner optimization.** ⭐ NEW
+
+Backward compatible 100% — caller ที่ใช้ params/fields เดิมทำงานได้ปกติ
 
 ---
 
@@ -40,6 +50,7 @@
     - 11.2 [thai_air_readings (History — REST Query)](#112-thai_air_readings-history--rest-query)
     - 11.3 [fetch-thai-air (Edge Function — Cron/Admin)](#113-fetch-thai-air-edge-function--cronadmin)
 12. [Database Schema](#12-database-schema)
+    - [Storage Bucket: device-photos ★ NEW v1.6](#storage-bucket-device-photos--new-v16)
 13. [RLS Policies Summary](#13-rls-policies-summary)
 14. [Error Reference](#14-error-reference)
 15. [Rate Limits & Constraints](#15-rate-limits--constraints)
@@ -579,6 +590,7 @@ const { data, error } = await supabase.rpc('get_my_devices');
 ```json
 [
   {
+    "id": 42,
     "device_id": "582D34712B43",
     "client_id": "be-tpp-cca7f7f924f0",
     "device_name": "Bedroom",
@@ -586,9 +598,18 @@ const { data, error } = await supabase.rpc('get_my_devices');
     "longitude": 100.5018,
     "is_public": true,
     "registered_at": "2026-01-30T08:00:00.000Z",
-    "updated_at": "2026-02-10T14:30:00.000Z"
+    "updated_at": "2026-02-10T14:30:00.000Z",
+    "location_name": "TCDC Chiang Mai",
+    "photo_url": "https://brgzimwzcfbwkgymqzvy.supabase.co/storage/v1/object/public/device-photos/...",
+    "category": "Public Library",
+    "address": "1/1 Muang Samut Rd, Chiang Mai 50300",
+    "email": "tcdc@chiangmai.com",
+    "phone": "(66) 5 208 0500",
+    "website": "tcdc.or.th",
+    "google_place_id": "ChIJxxxxxxxxxxx"
   },
   {
+    "id": 43,
     "device_id": "582D34712B59",
     "client_id": "be-tpp-3081b529e748",
     "device_name": "Office",
@@ -596,23 +617,40 @@ const { data, error } = await supabase.rpc('get_my_devices');
     "longitude": null,
     "is_public": false,
     "registered_at": "2026-01-30T08:05:00.000Z",
-    "updated_at": "2026-01-30T08:05:00.000Z"
+    "updated_at": "2026-01-30T08:05:00.000Z",
+    "location_name": null,
+    "photo_url": null,
+    "category": null,
+    "address": null,
+    "email": null,
+    "phone": null,
+    "website": null,
+    "google_place_id": null
   }
 ]
 ```
 
 #### Response Fields
 
-| Field           | Type            | Description                                  |
-|-----------------|-----------------|----------------------------------------------|
-| `device_id`     | TEXT            | Device serial number (unique identifier)     |
-| `client_id`     | TEXT            | ESP32 MAC-based client ID (nullable)         |
-| `device_name`   | TEXT            | User-assigned device name                    |
-| `latitude`      | DOUBLE PRECISION| Device GPS latitude (nullable)               |
-| `longitude`     | DOUBLE PRECISION| Device GPS longitude (nullable)              |
-| `is_public`     | BOOLEAN         | Whether device appears on the public air quality map |
-| `registered_at` | TIMESTAMPTZ     | When the device was registered               |
-| `updated_at`    | TIMESTAMPTZ     | When the device was last updated             |
+| Field             | Type            | Description                                  |
+|-------------------|-----------------|----------------------------------------------|
+| `id`              | BIGINT          | Internal row ID                              |
+| `device_id`       | TEXT            | Device serial number (unique identifier)     |
+| `client_id`       | TEXT            | ESP32 MAC-based client ID (nullable)         |
+| `device_name`     | TEXT            | User-assigned device name                    |
+| `latitude`        | DOUBLE PRECISION| Device GPS latitude (nullable)               |
+| `longitude`      | DOUBLE PRECISION| Device GPS longitude (nullable)              |
+| `is_public`       | BOOLEAN         | Whether device appears on the public air quality map |
+| `registered_at`   | TIMESTAMPTZ     | When the device was registered               |
+| `updated_at`      | TIMESTAMPTZ     | When the device was last updated             |
+| `location_name`   | TEXT            | **(v1.6)** Public-facing location name (e.g. "TCDC Chiang Mai"). Different from `device_name` which is per-user personal label. Nullable. |
+| `photo_url`       | TEXT            | **(v1.6)** URL to location photo (recommend Supabase Storage bucket `device-photos`). Nullable. |
+| `category`        | TEXT            | **(v1.6)** Location category for BEFF Map filtering (e.g. "Restaurant & Cafe", "Hotel", "Healthcare"). Free text — validate at UI layer. Nullable. |
+| `address`         | TEXT            | **(v1.6)** Full street address. Nullable. |
+| `email`           | TEXT            | **(v1.6)** Public contact email. Nullable. |
+| `phone`           | TEXT            | **(v1.6)** Public contact phone number. Nullable. |
+| `website`         | TEXT            | **(v1.6)** Public website URL. Nullable. |
+| `google_place_id` | TEXT            | **(v1.6)** Google Maps Place ID for opening business profile. Optional — app can fallback to lat/lng if NULL. |
 
 #### Error Cases
 
@@ -635,15 +673,25 @@ Registers a new IoT device to the authenticated user's account. A device can be 
 
 #### Parameters
 
-| Name            | Type            | Required | Default | Description                        |
-|-----------------|-----------------|----------|---------|------------------------------------|
-| `p_device_id`   | TEXT            | Yes      |  --        | Device serial number               |
-| `p_device_name` | TEXT            | No       | NULL    | Display name for the device        |
-| `p_latitude`    | DOUBLE PRECISION| No       | NULL    | GPS latitude for map display       |
-| `p_longitude`   | DOUBLE PRECISION| No       | NULL    | GPS longitude for map display      |
-| `p_is_public`   | BOOLEAN         | No       | `false` | Show on public air quality map     |
+| Name              | Type            | Required | Default | Description                        |
+|-------------------|-----------------|----------|---------|------------------------------------|
+| `p_device_id`     | TEXT            | Yes      |  --        | Device serial number               |
+| `p_device_name`   | TEXT            | No       | NULL    | Display name for the device        |
+| `p_latitude`      | DOUBLE PRECISION| No       | NULL    | GPS latitude for map display       |
+| `p_longitude`     | DOUBLE PRECISION| No       | NULL    | GPS longitude for map display      |
+| `p_is_public`     | BOOLEAN         | No       | `false` | Show on public air quality map     |
+| `p_location_name` | TEXT            | No       | NULL    | **(v1.6)** Public-facing location name (e.g. "TCDC Chiang Mai") |
+| `p_photo_url`     | TEXT            | No       | NULL    | **(v1.6)** URL to location photo (Supabase Storage or external) |
+| `p_category`      | TEXT            | No       | NULL    | **(v1.6)** Location category (free text: "Restaurant & Cafe", "Hotel", etc.) |
+| `p_address`       | TEXT            | No       | NULL    | **(v1.6)** Full street address     |
+| `p_email`         | TEXT            | No       | NULL    | **(v1.6)** Public contact email    |
+| `p_phone`         | TEXT            | No       | NULL    | **(v1.6)** Public contact phone    |
+| `p_website`       | TEXT            | No       | NULL    | **(v1.6)** Public website URL      |
+| `p_google_place_id`| TEXT           | No       | NULL    | **(v1.6)** Google Maps Place ID for business profile |
 
 #### Request Example
+
+**Minimal (backward compatible — v1.5 style):**
 
 ```javascript
 const { data, error } = await supabase.rpc('register_device', {
@@ -652,6 +700,27 @@ const { data, error } = await supabase.rpc('register_device', {
   p_latitude: 13.7563,
   p_longitude: 100.5018,
   p_is_public: true
+});
+```
+
+**With BEFF location card fields (v1.6):**
+
+```javascript
+const { data, error } = await supabase.rpc('register_device', {
+  p_device_id: '582D34712B99',
+  p_device_name: 'Main Hall',
+  p_latitude: 18.7883,
+  p_longitude: 98.9853,
+  p_is_public: true,
+  // New v1.6 fields (all optional)
+  p_location_name: 'TCDC Chiang Mai',
+  p_photo_url: 'https://brgzimwzcfbwkgymqzvy.supabase.co/storage/v1/object/public/device-photos/tcdc.webp',
+  p_category: 'Public Library',
+  p_address: '1/1 Muang Samut Rd, Chiang Mai 50300',
+  p_email: 'tcdc@chiangmai.com',
+  p_phone: '(66) 5 208 0500',
+  p_website: 'tcdc.or.th',
+  p_google_place_id: 'ChIJxxxxxxxxxxx'
 });
 ```
 
@@ -713,22 +782,48 @@ Updates settings for an existing device owned by the authenticated user. Only pr
 
 #### Parameters
 
-| Name            | Type            | Required | Default | Description                        |
-|-----------------|-----------------|----------|---------|------------------------------------|
-| `p_device_id`   | TEXT            | Yes      |  --        | Device serial number (lookup key)  |
-| `p_device_name` | TEXT            | No       | NULL    | New display name                   |
-| `p_client_id`   | TEXT            | No       | NULL    | ESP32 MAC-based client ID          |
-| `p_latitude`    | DOUBLE PRECISION| No       | NULL    | New GPS latitude                   |
-| `p_longitude`   | DOUBLE PRECISION| No       | NULL    | New GPS longitude                  |
-| `p_is_public`   | BOOLEAN         | No       | NULL    | New public visibility setting      |
+| Name              | Type            | Required | Default | Description                        |
+|-------------------|-----------------|----------|---------|------------------------------------|
+| `p_device_id`     | TEXT            | Yes      |  --        | Device serial number (lookup key)  |
+| `p_device_name`   | TEXT            | No       | NULL    | New display name                   |
+| `p_client_id`     | TEXT            | No       | NULL    | ESP32 MAC-based client ID          |
+| `p_latitude`      | DOUBLE PRECISION| No       | NULL    | New GPS latitude                   |
+| `p_longitude`     | DOUBLE PRECISION| No       | NULL    | New GPS longitude                  |
+| `p_is_public`     | BOOLEAN         | No       | NULL    | New public visibility setting      |
+| `p_location_name` | TEXT            | No       | NULL    | **(v1.6)** New public-facing location name |
+| `p_photo_url`     | TEXT            | No       | NULL    | **(v1.6)** New photo URL           |
+| `p_category`      | TEXT            | No       | NULL    | **(v1.6)** New category            |
+| `p_address`       | TEXT            | No       | NULL    | **(v1.6)** New address             |
+| `p_email`         | TEXT            | No       | NULL    | **(v1.6)** New public email        |
+| `p_phone`         | TEXT            | No       | NULL    | **(v1.6)** New public phone        |
+| `p_website`       | TEXT            | No       | NULL    | **(v1.6)** New website URL         |
+| `p_google_place_id`| TEXT           | No       | NULL    | **(v1.6)** New Google Place ID     |
+
+> **Update Semantics (NULL = retain existing):**
+> NULL params ไม่ clear field — คง value เดิมไว้ (COALESCE pattern).
+> ถ้าต้องการ clear field เป็น NULL ต้องใช้ direct `UPDATE` SQL (หรือ Admin Portal).
 
 #### Request Example
+
+**Update basic info (v1.5 style):**
 
 ```javascript
 const { data, error } = await supabase.rpc('update_device', {
   p_device_id: '582D34712B43',
   p_device_name: 'Master Bedroom',
   p_is_public: true
+});
+```
+
+**Update BEFF location card (v1.6):**
+
+```javascript
+const { data, error } = await supabase.rpc('update_device', {
+  p_device_id: '582D34712B43',
+  p_location_name: 'TCDC Chiang Mai',
+  p_photo_url: 'https://.../new-photo.webp',
+  p_category: 'Museum'
+  // Other fields omitted -- keep existing values
 });
 ```
 
@@ -896,15 +991,15 @@ const { data, error } = await supabase.rpc('get_public_air_quality', {
 
 > **Note:** The default call `get_public_air_quality()` returns **only public devices** (`is_public = true`). The example below shows `p_public_only: false` to illustrate the visibility difference between public and non-public devices.
 
-**Default call** `get_public_air_quality()` — returns only public devices:
+**Default call** `get_public_air_quality()` — returns only public devices (24 fields):
 
 ```json
 [
   {
-    "device_id": "582D34712B43",
-    "device_name": "Bedroom",
-    "latitude": 13.7563,
-    "longitude": 100.5018,
+    "device_id": "582D34712B55",
+    "device_name": "Machita Device",
+    "latitude": 18.7883,
+    "longitude": 98.9853,
     "is_public": true,
     "pm25": 12.3,
     "pm10": 18.7,
@@ -912,11 +1007,19 @@ const { data, error } = await supabase.rpc('get_public_air_quality', {
     "temperature": 28.5,
     "humidity": 65.2,
     "age_seconds": 120.5,
-    "display_name": "John Doe",
+    "display_name": "Hugh",
     "fan_speed": 45,
     "fan_mode": "automatic",
     "fan_state": "running",
-    "is_online": true
+    "is_online": true,
+    "location_name": "Machita Clinic",
+    "photo_url": "https://brgzimwzcfbwkgymqzvy.supabase.co/storage/v1/object/public/device-photos/machita.webp",
+    "category": "Healthcare",
+    "address": "123 Huay Kaew Rd, Chiang Mai 50200",
+    "email": "info@machitaclinic.com",
+    "phone": "(66) 5 312 3456",
+    "website": "machitaclinic.com",
+    "google_place_id": "ChIJxxxxxxxxxxx"
   }
 ]
 ```
@@ -926,10 +1029,10 @@ const { data, error } = await supabase.rpc('get_public_air_quality', {
 ```json
 [
   {
-    "device_id": "582D34712B43",
-    "device_name": "Bedroom",
-    "latitude": 13.7563,
-    "longitude": 100.5018,
+    "device_id": "582D34712B55",
+    "device_name": "Machita Device",
+    "latitude": 18.7883,
+    "longitude": 98.9853,
     "is_public": true,
     "pm25": 12.3,
     "pm10": 18.7,
@@ -937,11 +1040,19 @@ const { data, error } = await supabase.rpc('get_public_air_quality', {
     "temperature": 28.5,
     "humidity": 65.2,
     "age_seconds": 120.5,
-    "display_name": "John Doe",
+    "display_name": "Hugh",
     "fan_speed": 45,
     "fan_mode": "automatic",
     "fan_state": "running",
-    "is_online": true
+    "is_online": true,
+    "location_name": "Machita Clinic",
+    "photo_url": "https://...",
+    "category": "Healthcare",
+    "address": "123 Huay Kaew Rd, Chiang Mai 50200",
+    "email": "info@machitaclinic.com",
+    "phone": "(66) 5 312 3456",
+    "website": "machitaclinic.com",
+    "google_place_id": "ChIJxxxxxxxxxxx"
   },
   {
     "device_id": "582D34712B59",
@@ -959,31 +1070,51 @@ const { data, error } = await supabase.rpc('get_public_air_quality', {
     "fan_speed": null,
     "fan_mode": null,
     "fan_state": null,
-    "is_online": null
+    "is_online": null,
+    "location_name": null,
+    "photo_url": null,
+    "category": null,
+    "address": null,
+    "email": null,
+    "phone": null,
+    "website": null,
+    "google_place_id": null
   }
 ]
 ```
 
+> **Privacy Note:** BEFF location fields (8 fields from `location_name` to `google_place_id`) are treated as "Public only" data — same visibility rules as `display_name`/`fan_*`/`is_online`. When `is_public=false`, all 8 fields return NULL regardless of whether the admin has filled them in.
+
 #### Response Fields
 
-| Field          | Type            | Visibility     | Description                                      |
-|----------------|-----------------|----------------|--------------------------------------------------|
-| `device_id`    | TEXT            | All devices    | Device serial number                             |
-| `device_name`  | TEXT            | All devices    | User-assigned device name                        |
-| `latitude`     | DOUBLE PRECISION| All devices    | GPS latitude                                     |
-| `longitude`    | DOUBLE PRECISION| All devices    | GPS longitude                                    |
-| `is_public`    | BOOLEAN         | All devices    | Whether device is public                         |
-| `pm25`         | REAL            | All devices    | Latest PM2.5 (µg/m³)                            |
-| `pm10`         | REAL            | All devices    | Latest PM10 (µg/m³)                             |
-| `co2`          | INTEGER         | All devices    | Latest CO2 (ppm)                                 |
-| `temperature`  | REAL            | All devices    | Latest temperature (°C)                          |
-| `humidity`     | REAL            | All devices    | Latest humidity (%)                              |
-| `age_seconds`  | DOUBLE PRECISION| All devices    | Seconds since last reading                       |
-| `display_name` | TEXT            | Public only    | Device owner's display name (NULL if not public) |
-| `fan_speed`    | INTEGER         | Public only    | Fan speed (NULL if not public)                   |
-| `fan_mode`     | TEXT            | Public only    | Fan mode (NULL if not public)                    |
-| `fan_state`    | TEXT            | Public only    | Fan state (NULL if not public)                   |
-| `is_online`    | BOOLEAN         | Public only    | Online if status within 10 min (NULL if not public) |
+| Field             | Type            | Visibility     | Description                                      |
+|-------------------|-----------------|----------------|--------------------------------------------------|
+| `device_id`       | TEXT            | All devices    | Device serial number                             |
+| `device_name`     | TEXT            | All devices    | User-assigned device name                        |
+| `latitude`        | DOUBLE PRECISION| All devices    | GPS latitude                                     |
+| `longitude`       | DOUBLE PRECISION| All devices    | GPS longitude                                    |
+| `is_public`       | BOOLEAN         | All devices    | Whether device is public                         |
+| `pm25`            | REAL            | All devices    | Latest PM2.5 (µg/m³)                            |
+| `pm10`            | REAL            | All devices    | Latest PM10 (µg/m³)                             |
+| `co2`             | INTEGER         | All devices    | Latest CO2 (ppm)                                 |
+| `temperature`     | REAL            | All devices    | Latest temperature (°C)                          |
+| `humidity`        | REAL            | All devices    | Latest humidity (%)                              |
+| `age_seconds`     | DOUBLE PRECISION| All devices    | Seconds since last reading                       |
+| `display_name`    | TEXT            | Public only    | Device owner's display name (NULL if not public) |
+| `fan_speed`       | INTEGER         | Public only    | Fan speed (NULL if not public)                   |
+| `fan_mode`        | TEXT            | Public only    | Fan mode (NULL if not public)                    |
+| `fan_state`       | TEXT            | Public only    | Fan state (NULL if not public)                   |
+| `is_online`       | BOOLEAN         | Public only    | Online if status within 10 min (NULL if not public) |
+| `location_name`   | TEXT            | Public only    | **(v1.6)** Public-facing location name (e.g. "TCDC Chiang Mai"). NULL if not public. |
+| `photo_url`       | TEXT            | Public only    | **(v1.6)** URL to location photo (Supabase Storage or external). NULL if not public. |
+| `category`        | TEXT            | Public only    | **(v1.6)** Location category for BEFF Map filtering (e.g. "Restaurant & Cafe", "Hotel"). NULL if not public. |
+| `address`         | TEXT            | Public only    | **(v1.6)** Full street address. NULL if not public. |
+| `email`           | TEXT            | Public only    | **(v1.6)** Public contact email. NULL if not public. |
+| `phone`           | TEXT            | Public only    | **(v1.6)** Public contact phone. NULL if not public. |
+| `website`         | TEXT            | Public only    | **(v1.6)** Public website URL. NULL if not public. |
+| `google_place_id` | TEXT            | Public only    | **(v1.6)** Google Maps Place ID for opening business profile. NULL if not public. |
+
+**Total: 24 fields** (16 v1.5 + 8 v1.6 BEFF extensions)
 
 #### Error Cases
 
@@ -2115,22 +2246,32 @@ curl -X POST 'https://brgzimwzcfbwkgymqzvy.supabase.co/functions/v1/fetch-thai-a
 
 ### Table: user_devices
 
-| Column         | Type            | Nullable | Default | Description                      |
-|----------------|-----------------|----------|---------|----------------------------------|
-| `id`           | BIGSERIAL (PK)  | No       | Auto    | Internal row ID                  |
-| `user_id`      | UUID (FK)       | No       |  --        | References auth.users(id)        |
-| `device_id`    | TEXT            | No       |  --        | Device serial number             |
-| `client_id`    | TEXT            | Yes      | NULL    | ESP32 MAC-based client ID        |
-| `device_name`  | TEXT            | Yes      | NULL    | User-assigned name               |
-| `latitude`     | DOUBLE PRECISION| Yes      | NULL    | GPS latitude                     |
-| `longitude`    | DOUBLE PRECISION| Yes      | NULL    | GPS longitude                    |
-| `is_public`    | BOOLEAN         | Yes      | false   | Show on public map               |
-| `registered_at`| TIMESTAMPTZ     | Yes      | NOW()   | Registration timestamp           |
-| `updated_at`   | TIMESTAMPTZ     | Yes      | NOW()   | Last update timestamp            |
+| Column            | Type            | Nullable | Default | Description                      |
+|-------------------|-----------------|----------|---------|----------------------------------|
+| `id`              | BIGSERIAL (PK)  | No       | Auto    | Internal row ID                  |
+| `user_id`         | UUID (FK)       | No       |  --        | References auth.users(id)        |
+| `device_id`       | TEXT            | No       |  --        | Device serial number             |
+| `client_id`       | TEXT            | Yes      | NULL    | ESP32 MAC-based client ID        |
+| `device_name`     | TEXT            | Yes      | NULL    | User-assigned name               |
+| `latitude`        | DOUBLE PRECISION| Yes      | NULL    | GPS latitude                     |
+| `longitude`       | DOUBLE PRECISION| Yes      | NULL    | GPS longitude                    |
+| `is_public`       | BOOLEAN         | Yes      | false   | Show on public map               |
+| `registered_at`   | TIMESTAMPTZ     | Yes      | NOW()   | Registration timestamp           |
+| `updated_at`      | TIMESTAMPTZ     | Yes      | NOW()   | Last update timestamp            |
+| `location_name`   | TEXT            | Yes      | NULL    | **(v1.6)** Public-facing location name |
+| `photo_url`       | TEXT            | Yes      | NULL    | **(v1.6)** URL to location photo |
+| `category`        | TEXT            | Yes      | NULL    | **(v1.6)** Location category (free text) |
+| `address`         | TEXT            | Yes      | NULL    | **(v1.6)** Full street address   |
+| `email`           | TEXT            | Yes      | NULL    | **(v1.6)** Public contact email  |
+| `phone`           | TEXT            | Yes      | NULL    | **(v1.6)** Public contact phone  |
+| `website`         | TEXT            | Yes      | NULL    | **(v1.6)** Public website URL    |
+| `google_place_id` | TEXT            | Yes      | NULL    | **(v1.6)** Google Maps Place ID  |
 
 **Constraints:**
 - `user_id` references `auth.users(id) ON DELETE CASCADE`
 - `UNIQUE (user_id, device_id)`  --  one user can register a device once; max 3 users per device (enforced in `register_device()` function)
+
+**Round 2 (v1.6) Additions:** 8 new columns สำหรับ BEFF location card (Prototype V6 design). ทุก column nullable — backward compatible กับ devices ที่มีอยู่.
 
 ---
 
@@ -2296,9 +2437,87 @@ WHERE s.is_active = true;
 
 ---
 
+### Storage Bucket: device-photos ★ NEW v1.6
+
+Supabase Storage bucket สำหรับเก็บรูปของ BEFF locations (ใช้ใน Prototype V6 card).
+
+| Property            | Value                                                 |
+|---------------------|-------------------------------------------------------|
+| **Bucket ID**       | `device-photos`                                       |
+| **Public Read**     | `true` (ใครก็ดูผ่าน URL ได้ — ไม่ต้อง login)            |
+| **File Size Limit** | 5 MB                                                  |
+| **Allowed MIME**    | `image/jpeg`, `image/jpg`, `image/png`, `image/webp`  |
+| **Path Convention** | `{user_id}/{device_id}/{filename}`                    |
+
+#### Public URL Format
+
+```
+https://brgzimwzcfbwkgymqzvy.supabase.co/storage/v1/object/public/device-photos/{path}
+```
+
+ตัวอย่าง:
+```
+https://brgzimwzcfbwkgymqzvy.supabase.co/storage/v1/object/public/device-photos/aaaa-bbbb/tcdc.webp
+```
+
+#### RLS Policies (storage.objects — 3 policies)
+
+| Policy                     | Operation | Roles           | Rule                                          |
+|----------------------------|-----------|-----------------|-----------------------------------------------|
+| `device_photos_auth_insert`| INSERT    | `authenticated` | `(storage.foldername(name))[1] = auth.uid()::text` |
+| `device_photos_auth_update`| UPDATE    | `authenticated` | Same as insert                                 |
+| `device_photos_auth_delete`| DELETE    | `authenticated` | Same as insert                                 |
+
+> **No SELECT policy:** Public buckets ใช้ CDN endpoint `/storage/v1/object/public/...` ที่ bypass RLS อยู่แล้ว — ไม่ต้องมี SELECT policy เพิ่ม.
+>
+> **Write constraint:** Authenticated user อัปโหลด/แก้/ลบได้เฉพาะใน folder ของตัวเอง (`{user_id}/...`) เท่านั้น. Admin role support จะเพิ่มใน Phase 4 (Admin Portal).
+
+#### Upload Example (JavaScript)
+
+```javascript
+async function uploadDevicePhoto(file, deviceId) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not logged in');
+
+  const ext = file.name.split('.').pop().toLowerCase();
+  const filename = `${Date.now()}.${ext}`;
+  const path = `${user.id}/${deviceId}/${filename}`;
+
+  const { data, error } = await supabase.storage
+    .from('device-photos')
+    .upload(path, file, {
+      cacheControl: '3600',
+      upsert: false,
+      contentType: file.type
+    });
+
+  if (error) throw error;
+
+  // ได้ public URL กลับมา
+  const { data: { publicUrl } } = supabase.storage
+    .from('device-photos')
+    .getPublicUrl(path);
+
+  return publicUrl;  // เก็บลง user_devices.photo_url
+}
+```
+
+#### Delete Example
+
+```javascript
+async function deleteDevicePhoto(path) {
+  const { error } = await supabase.storage
+    .from('device-photos')
+    .remove([path]);
+  if (error) throw error;
+}
+```
+
+---
+
 ## 13. RLS Policies Summary
 
-Row Level Security (RLS) is enabled on all five tables. All policies use the `(select auth.uid())` optimization to prevent PostgreSQL from re-evaluating `auth.uid()` for every row.
+Row Level Security (RLS) is enabled on all database tables **and** on `storage.objects` (for the `device-photos` bucket). All policies use the `(select auth.uid())` optimization to prevent PostgreSQL from re-evaluating `auth.uid()` for every row.
 
 ### profiles (2 Policies)
 
@@ -2363,6 +2582,18 @@ Row Level Security (RLS) is enabled on all five tables. All policies use the `(s
 | thai_air_readings_service_write     | ALL       | `true` (service_role only via Edge Function)            |
 
 > **Note:** Thai Air data is public — both stations and readings are readable by anyone with the anon key. Write access is restricted to service_role (used by the `fetch-thai-air` Edge Function via pg_cron).
+
+### storage.objects — device-photos bucket (3 Policies) ★ NEW v1.6
+
+| Policy                       | Operation | Role            | Rule                                                        |
+|------------------------------|-----------|-----------------|-------------------------------------------------------------|
+| `device_photos_auth_insert`  | INSERT    | `authenticated` | `bucket_id = 'device-photos' AND (storage.foldername(name))[1] = auth.uid()::text` |
+| `device_photos_auth_update`  | UPDATE    | `authenticated` | Same as insert                                              |
+| `device_photos_auth_delete`  | DELETE    | `authenticated` | Same as insert                                              |
+
+> **No SELECT policy (intentional):** Public buckets ใน Supabase ใช้ CDN endpoint `/storage/v1/object/public/{bucket}/{path}` ที่ bypass RLS โดยธรรมชาติ — ไม่ต้องมี SELECT policy เพิ่ม. การมี broad SELECT policy จะเปิดให้ `list` operation ทำงาน (ดู filenames ทั้งหมดใน bucket) ซึ่งเป็น privacy leak.
+>
+> **Write constraint:** Authenticated user อัปโหลด/แก้/ลบได้เฉพาะใน folder ของตัวเอง — path ต้องขึ้นต้นด้วย `{user_id}/...` เท่านั้น. Admin role override จะเพิ่มใน Phase 4B (Admin Portal).
 
 ---
 
@@ -2464,4 +2695,5 @@ Row Level Security (RLS) is enabled on all five tables. All policies use the `(s
 *Change from v1.4: Deprecated get-outdoor-air + get-outdoor-air-batch (Section 10.1-10.2), added aqicn_stations REST API (Section 10.3), added Migration Guide, added aqicn_stations DB schema + RLS policies, updated AQICN API Limits*
 *Change from v1.3: Added Section 11 (Thai Air Quality — v_thai_air_latest, thai_air_readings, fetch-thai-air), thai_air_stations/readings DB schema, RLS policies, retention 90 days, Thai Air rate limits*
 *Change from v1.2: Added Section 10.2 (get-outdoor-air-batch), updated Section 7.2 (get_public_air_quality p_public_only parameter)*
+*Change from v1.5 to v1.6: Section 7.2 response extended with 8 BEFF location fields (location_name, photo_url, category, address, email, phone, website, google_place_id) — privacy-gated. Function marked STABLE. Applied via Round E migration on 19 April 2026.*
 *Change from v1.1: Added Section 10 (Outdoor Air Quality - AQICN Edge Function), outdoor_air_readings schema, RLS policies, AQICN rate limits*
