@@ -1320,7 +1320,7 @@
                     </button>
                 </div>
                 <div class="api-card-body">
-                    <p>Fetch cached AQICN station data (updated hourly via pg_cron). Shows station count, top AQI station, and data freshness.</p>
+                    <p>Fetch AQICN station data via <code>v_aqicn_stations_status</code> view (updated hourly via pg_cron). Shows station count, AQI distribution, top station, data freshness, and online/delayed/offline status breakdown.</p>
                     <div class="param-row">
                         <span class="param-label">filter</span>
                         <select class="param-input" id="aqicnFilter">
@@ -1328,6 +1328,9 @@
                             <option value="top10">Top 10 highest AQI</option>
                             <option value="healthy">AQI &le; 50 (Good)</option>
                             <option value="unhealthy">AQI &gt; 100 (Unhealthy+)</option>
+                            <option value="online">&#128994; Online (&le; 6h)</option>
+                            <option value="delayed">&#128993; Delayed (6-12h)</option>
+                            <option value="offline">&#128308; Offline (&gt; 12h)</option>
                         </select>
                     </div>
                     <div id="outputAqicnStations"></div>
@@ -2734,8 +2737,8 @@ async function testAqicnStations() {
     var filter = document.getElementById('aqicnFilter').value;
 
     try {
-        var query = sb.from('aqicn_stations')
-            .select('uid,station_name,latitude,longitude,aqi,measured_at,fetched_at')
+        var query = sb.from('v_aqicn_stations_status')
+            .select('uid,station_name,latitude,longitude,aqi,measured_at,fetched_at,station_status,data_age_hours')
             .not('aqi', 'is', null);
 
         if (filter === 'top10') {
@@ -2744,6 +2747,9 @@ async function testAqicnStations() {
             query = query.lte('aqi', 50).order('aqi', { ascending: true });
         } else if (filter === 'unhealthy') {
             query = query.gt('aqi', 100).order('aqi', { ascending: false });
+        } else if (filter === 'online' || filter === 'delayed' || filter === 'offline') {
+            // กรองตามสถานะสถานี (R-S2)
+            query = query.eq('station_status', filter).order('aqi', { ascending: false });
         }
 
         var { data, error } = await query;
@@ -2773,14 +2779,28 @@ async function testAqicnStations() {
             });
             summary.aqi_distribution = dist;
 
+            // สรุปจำนวนสถานีตามสถานะ online/delayed/offline/unknown (R-S2)
+            // รองรับทั้ง snake_case (station_status) และ camelCase (stationStatus)
+            var statusCount = { online: 0, delayed: 0, offline: 0, unknown: 0 };
+            data.forEach(function(s) {
+                var st = s.station_status || s.stationStatus || 'unknown';
+                if (statusCount[st] === undefined) statusCount[st] = 0;
+                statusCount[st]++;
+            });
+            summary.status_breakdown = statusCount;
+
             // Top station (highest AQI)
             var sorted = data.slice().sort(function(a, b) { return (b.aqi || 0) - (a.aqi || 0); });
+            var topAge = (sorted[0].data_age_hours != null) ? sorted[0].data_age_hours
+                       : (sorted[0].dataAgeHours != null) ? sorted[0].dataAgeHours : null;
             summary.top_aqi_station = {
                 station_name: sorted[0].station_name,
                 aqi: sorted[0].aqi,
                 uid: sorted[0].uid,
                 latitude: sorted[0].latitude,
                 longitude: sorted[0].longitude,
+                station_status: sorted[0].station_status || sorted[0].stationStatus || null,
+                data_age_hours: topAge,
             };
 
             // Top 5 highest AQI
@@ -2789,6 +2809,7 @@ async function testAqicnStations() {
                     station_name: s.station_name,
                     aqi: s.aqi,
                     measured_at: s.measured_at,
+                    station_status: s.station_status || s.stationStatus || null,
                 };
             });
 
