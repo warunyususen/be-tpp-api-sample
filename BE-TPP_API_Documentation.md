@@ -1,18 +1,34 @@
 # BE-TPP API Documentation
 
-**Version:** 1.6
-**Last Updated:** 17 April 2026
+**Version:** 1.8
+**Last Updated:** 03 June 2026
 **Project:** BE-TPP IoT (Breatheeasy Total Positive Pressure)
+**Language:** English (translated from v1.7)
+
+**Changelog v1.8 (03 June 2026):**
+- **Full English translation of the v1.7 document. All Thai notes and code comments are translated; Thai data values (e.g. station and province names) are kept as-is because they are stored in Thai in the database.**
+- **[Verified against live DB, 03 Jun 2026] Corrected `aqicn_stations` index names: `idx_aqicn_stations_geo` → `idx_aqicn_stations_lat_lng`; `idx_aqicn_stations_measured` (on `measured_at`) → `idx_aqicn_stations_fetched` (on `fetched_at DESC`); marked `idx_aqicn_stations_aqi` as a partial index. Added the `aqicn_stations_pkey` and `aqicn_stations_uid_key` (UNIQUE on `uid`) constraints.**
+- **[Verified] `aqicn_stations` RLS reduced to the single live policy `aqicn_stations_read_all` (SELECT, `true`).**
+- **[Verified] `aqicn_stations` row count corrected from ~470 to ~1,026 total (≈579 fetched within the last 6h).**
+- **[Verified] Thai Air station count corrected from 245 to 259 (Air4Thai 189 + CUSense 70).**
+- **[Section 10.3] `uid` corrected to INTEGER in the response field table and JSON examples (previously shown as TEXT `"@1234"`), to match the verified DB schema.**
+
+**Changelog v1.7 (03 June 2026):**
+- **[Section 10.4] Added `v_aqicn_stations_status` (View) ★ NEW — adds `station_status` (online/delayed/offline/unknown) + `data_age_hours`, computed from `measured_at` at query time.**
+- **[Section 10.5] Added `v_aqicn_stations_live` (View) ★ NEW — returns only `online` stations (≤6h) for the customer app/map.**
+- **[Section 12] Corrected the `aqicn_stations` schema to match the live table (removed `dominant_pollutant`/`raw_json`, which do not exist; added `id`/`created_at`; `uid` is INTEGER) — verified via information_schema on 03 Jun 2026.**
+
+100% backward compatible — the existing `aqicn_stations` REST endpoint (Section 10.3) behaves exactly as before; the new views are additive.
 
 **Changelog v1.6 (17 April 2026):**
-- [Section 6.1] `get_my_devices` — เพิ่ม 8 fields ใหม่ใน response (location_name, photo_url, category, address, email, phone, website, google_place_id)
-- [Section 6.2] `register_device` — เพิ่ม 8 optional params ใหม่ (all default NULL)
-- [Section 6.3] `update_device` — เพิ่ม 8 optional params ใหม่ (all default NULL, COALESCE pattern)
-- [Section 12] `user_devices` schema — เพิ่ม 8 columns ใหม่
-- [Section 12] เพิ่ม **Section 12.x Storage Buckets** (bucket `device-photos` + policies)
-- **[Section 7.2] `get_public_air_quality` — เพิ่ม 8 BEFF fields ใน response (v1.6 extension, 19 Apr 2026 via Round E migration). Privacy-gated: exposed only when is_public=TRUE. Also marked STABLE for query planner optimization.** ⭐ NEW
+- [Section 6.1] `get_my_devices` — added 8 new response fields (location_name, photo_url, category, address, email, phone, website, google_place_id)
+- [Section 6.2] `register_device` — added 8 new optional params (all default NULL)
+- [Section 6.3] `update_device` — added 8 new optional params (all default NULL, COALESCE pattern)
+- [Section 12] `user_devices` schema — added 8 new columns
+- [Section 12] Added **Section 12.x Storage Buckets** (bucket `device-photos` + policies)
+- **[Section 7.2] `get_public_air_quality` — added 8 BEFF fields to the response (v1.6 extension, 19 Apr 2026 via Round E migration). Privacy-gated: exposed only when is_public=TRUE. Also marked STABLE for query-planner optimization.** ⭐ NEW
 
-Backward compatible 100% — caller ที่ใช้ params/fields เดิมทำงานได้ปกติ
+100% backward compatible — callers using the existing params/fields continue to work.
 
 ---
 
@@ -45,6 +61,8 @@ Backward compatible 100% — caller ที่ใช้ params/fields เดิ�
     - 10.1 [get-outdoor-air (Edge Function) ⚠ DEPRECATED](#101-get-outdoor-air-edge-function)
     - 10.2 [get-outdoor-air-batch (Edge Function) ⚠ DEPRECATED](#102-get-outdoor-air-batch-edge-function)
     - 10.3 [aqicn_stations (REST Query) ★ NEW](#103-aqicn_stations-rest-query)
+    - 10.4 [v_aqicn_stations_status (View) ★ NEW v1.7](#104-v_aqicn_stations_status-view--rest-query)
+    - 10.5 [v_aqicn_stations_live (View) ★ NEW v1.7](#105-v_aqicn_stations_live-view--rest-query)
 11. [API Functions  --  Thai Air Quality (Nationwide)](#11-api-functions--thai-air-quality-nationwide)
     - 11.1 [v_thai_air_latest (View — REST Query)](#111-v_thai_air_latest-view--rest-query)
     - 11.2 [thai_air_readings (History — REST Query)](#112-thai_air_readings-history--rest-query)
@@ -76,7 +94,7 @@ ESP32 Devices --MQTT--> EMQX Cloud --REST--> Supabase PostgreSQL
                                     +---------------+---------------+
                                     |               |               |
                               Web Dashboard   AQICN API     Air4Thai + CUSense
-                                          (map/bounds,    (245 stations,
+                                          (map/bounds,    (259 stations,
                                            pg_cron 1hr)    pg_cron 1hr)
 ```
 
@@ -90,7 +108,7 @@ ESP32 Devices --MQTT--> EMQX Cloud --REST--> Supabase PostgreSQL
 | Authentication  | Supabase Auth (Magic Link + Email OTP) |
 | Edge Functions  | Supabase Edge Functions (Deno)      |
 | Outdoor Air     | AQICN API (via Edge Function proxy) |
-| Thai Air        | Air4Thai (PCD) + CUSense (Chula) — 245 stations |
+| Thai Air        | Air4Thai (PCD) + CUSense (Chula) — 259 stations |
 | Hosting         | GitHub Pages (test console)         |
 | Email           | Resend (noreply@be-tpp.com)         |
 
@@ -109,7 +127,7 @@ ESP32 Devices --MQTT--> EMQX Cloud --REST--> Supabase PostgreSQL
 - **Device status**: ESP32 publishes every 30 seconds -> EMQX samples every 5 minutes -> Supabase INSERT
 - **Fan control**: Web App -> Edge Function -> MQTT publish to EMQX + INSERT to `device_status` -> Realtime notification
 - **Outdoor air quality**: Web/Mobile App -> Edge Function (`get-outdoor-air`) -> AQICN API (cache 1 hr in `outdoor_air_readings`)
-- **Thai air quality**: pg_cron (hourly) -> Edge Function (`fetch-thai-air`) -> Air4Thai + CUSense -> `thai_air_stations` + `thai_air_readings` (245 stations, ~2s per run)
+- **Thai air quality**: pg_cron (hourly) -> Edge Function (`fetch-thai-air`) -> Air4Thai + CUSense -> `thai_air_stations` + `thai_air_readings` (259 stations, ~2s per run)
 - **Data retention**: 180 days (sensor/device/outdoor), 90 days (thai_air_readings)
 - **Deduplication**: `time_bucket` column with UPSERT prevents duplicate entries
 
@@ -800,8 +818,8 @@ Updates settings for an existing device owned by the authenticated user. Only pr
 | `p_google_place_id`| TEXT           | No       | NULL    | **(v1.6)** New Google Place ID     |
 
 > **Update Semantics (NULL = retain existing):**
-> NULL params ไม่ clear field — คง value เดิมไว้ (COALESCE pattern).
-> ถ้าต้องการ clear field เป็น NULL ต้องใช้ direct `UPDATE` SQL (หรือ Admin Portal).
+> NULL params do not clear a field — the existing value is kept (COALESCE pattern).
+> To clear a field to NULL, use a direct `UPDATE` SQL statement (or the Admin Portal).
 
 #### Request Example
 
@@ -1458,7 +1476,7 @@ const { data, error } = await supabase
 > These per-device Edge Functions will continue to function but are no longer recommended.
 >
 > **Replacement:** Use `aqicn_stations` REST API (Section 10.3) which provides pre-fetched
-> AQICN data for 470 stations nationwide, updated every hour via pg_cron.
+> AQICN data for ~1,026 stations nationwide, updated every hour via pg_cron.
 > Use `haversine()` on the client side to find the nearest station.
 >
 > See **Migration Guide** (`BE-TPP_Migration_Guide_aqicn_stations.md`) for transition details.
@@ -1835,7 +1853,7 @@ Example: 10 devices in 4 unique zones = max 4 AQICN API calls (not 10).
 
 ### 10.3 aqicn_stations (REST Query) ★ NEW
 
-Pre-fetched AQICN air quality data for ~470 stations across Thailand and neighboring countries. Updated automatically every hour by the `fetch-aqicn-map` Edge Function via pg_cron. This is the **recommended replacement** for `get-outdoor-air` and `get-outdoor-air-batch`.
+Pre-fetched AQICN air quality data for ~1,026 stations across Thailand and neighboring countries. Updated automatically every hour by the `fetch-aqicn-map` Edge Function via pg_cron. This is the **recommended replacement** for `get-outdoor-air` and `get-outdoor-air-batch`.
 
 | Property        | Value                              |
 |-----------------|------------------------------------|
@@ -1861,7 +1879,7 @@ apikey: <SUPABASE_ANON_KEY>
 
 | Field            | Type        | Description                                    |
 |------------------|-------------|------------------------------------------------|
-| `uid`            | TEXT        | AQICN station unique ID (e.g. "@1234")         |
+| `uid`            | INTEGER     | AQICN station ID (e.g. 7397; may be negative for unofficial stations) |
 | `station_name`   | TEXT        | Station display name                           |
 | `latitude`       | REAL        | GPS latitude                                   |
 | `longitude`      | REAL        | GPS longitude                                  |
@@ -1874,7 +1892,7 @@ apikey: <SUPABASE_ANON_KEY>
 ```json
 [
   {
-    "uid": "@7397",
+    "uid": 7397,
     "station_name": "Bangkok US Embassy",
     "latitude": 13.7563,
     "longitude": 100.5018,
@@ -1883,7 +1901,7 @@ apikey: <SUPABASE_ANON_KEY>
     "fetched_at": "2026-04-13T07:30:12+00:00"
   },
   {
-    "uid": "@10570",
+    "uid": 10570,
     "station_name": "Chiang Mai",
     "latitude": 18.7883,
     "longitude": 98.9853,
@@ -1896,7 +1914,7 @@ apikey: <SUPABASE_ANON_KEY>
 
 #### Usage Notes
 
-- Returns ~446 stations (those with non-null AQI out of ~470 total)
+- Returns the stations with non-null AQI (a subset of the ~1,026 total rows; the exact non-null count was not re-verified in v1.8)
 - Response size: ~53 KB — can be cached in client memory
 - No login required — public data readable by anon key
 - AQI is US EPA standard — use `aqiToPm25()` to convert to PM2.5 µg/m³ (approximate ±10%)
@@ -1985,14 +2003,84 @@ if (nearest && nearest.distance <= 50) {
 
 ---
 
+### 10.4 v_aqicn_stations_status (View — REST Query) ★ NEW v1.7
+
+A read-only view over `aqicn_stations` that adds a computed **`station_status`** (online/delayed/offline/unknown) and **`data_age_hours`**, derived from `measured_at` vs `now()` **at query time** (not stored, no cron). Returns the **full** station list including stale/dead stations — use for admin dashboards and data-quality monitoring.
+
+> **Why this exists:** `aqicn_stations` accumulates dead stations. When a station stops reporting upstream, AQICN drops it from the bounds feed, so our cron never re-upserts it and its `fetched_at` freezes. As a result ~40% of rows can be >12h stale while still carrying an old AQI (e.g. ghost AQI=500 stations). This view surfaces that staleness so clients don't present old data as current.
+
+#### Request Example
+
+```
+GET https://brgzimwzcfbwkgymqzvy.supabase.co/rest/v1/v_aqicn_stations_status?select=uid,station_name,latitude,longitude,aqi,station_status,data_age_hours,measured_at&aqi=not.is.null
+```
+
+```javascript
+const { data, error } = await sb
+  .from('v_aqicn_stations_status')
+  .select('uid,station_name,latitude,longitude,aqi,station_status,data_age_hours,measured_at')
+  .not('aqi', 'is', null);
+```
+
+#### Status Thresholds
+
+| `station_status` | Condition (based on `measured_at`) |
+|------------------|------------------------------------|
+| `online`         | ≤ 6 hours                          |
+| `delayed`        | > 6 and ≤ 12 hours                 |
+| `offline`        | > 12 hours                         |
+| `unknown`        | `measured_at` IS NULL              |
+
+#### Response Fields (in addition to all `aqicn_stations` columns)
+
+| Field             | Type    | Description                                      |
+|-------------------|---------|--------------------------------------------------|
+| `station_status`  | TEXT    | `online` / `delayed` / `offline` / `unknown`     |
+| `data_age_hours`  | NUMERIC | Hours since `measured_at` (1 decimal place)      |
+
+**Security:** `security_invoker = true` (respects the RLS of `aqicn_stations`). `GRANT SELECT TO anon, authenticated`.
+
+---
+
+### 10.5 v_aqicn_stations_live (View — REST Query) ★ NEW v1.7
+
+Convenience view returning **only `online` stations (≤6h)** — same columns as Section 10.4 but pre-filtered (`WHERE station_status = 'online'`). Built **on top of** `v_aqicn_stations_status`, so the freshness thresholds live in a single place.
+
+**Use this as the default source for customer-facing maps/lists** so ghost/dead stations never appear.
+
+#### Request Example
+
+```
+GET https://brgzimwzcfbwkgymqzvy.supabase.co/rest/v1/v_aqicn_stations_live?select=uid,station_name,latitude,longitude,aqi,measured_at
+```
+
+```javascript
+const { data, error } = await sb
+  .from('v_aqicn_stations_live')
+  .select('uid,station_name,latitude,longitude,aqi,measured_at')
+  .not('aqi', 'is', null);
+```
+
+**Security:** `security_invoker = true`. `GRANT SELECT TO anon, authenticated`.
+
+#### View Selection Guide
+
+| Use case                         | Recommended source            |
+|----------------------------------|-------------------------------|
+| Customer app / map (current AQ)  | `v_aqicn_stations_live`       |
+| Admin / debug / data quality     | `v_aqicn_stations_status`     |
+| Raw snapshot (no status)         | `aqicn_stations` (Section 10.3) |
+
+---
+
 ## 11. API Functions - Thai Air Quality (Nationwide)
 
-Nationwide air quality data for Thailand from 2 sources: **Air4Thai** (Pollution Control Department, 186 stations) + **CUSense** (Chulalongkorn University, ~59 stations), totalling **245 stations**. Updated every hour via the Edge Function `fetch-thai-air` (pg_cron).
+Nationwide air quality data for Thailand from 2 sources: **Air4Thai** (Pollution Control Department, 189 stations) + **CUSense** (Chulalongkorn University, ~70 stations), totalling **259 stations**. Updated every hour via the Edge Function `fetch-thai-air` (pg_cron).
 
 | Property        | Value                              |
 |-----------------|------------------------------------|
 | **Data Sources** | Air4Thai (PCD) + CUSense (Chula)  |
-| **Stations**    | 245 (186 Air4Thai + ~59 CUSense)   |
+| **Stations**    | 259 (189 Air4Thai + ~70 CUSense)   |
 | **Update**      | Every hour (pg_cron at xx:05)      |
 | **Retention**   | 90 days (pg_cron cleanup 03:30 UTC)|
 | **Auth**        | Public read (anon key), Admin write|
@@ -2018,7 +2106,7 @@ apikey: <SUPABASE_ANON_KEY>
 #### Filter Examples
 
 ```
-// Fetch all stations (245 rows)
+// Fetch all stations (259 rows)
 GET .../rest/v1/v_thai_air_latest?select=*
 
 // Filter by province
@@ -2215,14 +2303,16 @@ curl -X POST 'https://brgzimwzcfbwkgymqzvy.supabase.co/functions/v1/fetch-thai-a
 }
 ```
 
+> **Note:** The counts above are from a captured sample run and vary per run. The current canonical total is **259 stations** (Air4Thai 189 + CUSense ~70) — see Section 11 overview.
+
 #### Data Sources
 
 | Source   | URL / Endpoint                                          | Auth              | Stations |
 |----------|--------------------------------------------------------|-------------------|----------|
-| Air4Thai | `http://air4thai.pcd.go.th/services/getNewAQI_JSON.php`| None (public)     | 186      |
-| CUSense  | `https://www.cusense.net:8082/api/v1/sensorData/realtime/all` | X-Gravitee-Api-Key | ~59 (non-PCD) |
+| Air4Thai | `http://air4thai.pcd.go.th/services/getNewAQI_JSON.php`| None (public)     | 189      |
+| CUSense  | `https://www.cusense.net:8082/api/v1/sensorData/realtime/all` | X-Gravitee-Api-Key | ~70 (non-PCD) |
 
-> **Note:** CUSense stations starting with `PCD/` (158 stations) are duplicates of Air4Thai data and are excluded. Only cusensor3/nansensor/cusensor2 projects (~59 stations) are fetched.
+> **Note:** CUSense stations starting with `PCD/` (158 stations) are duplicates of Air4Thai data and are excluded. Only cusensor3/nansensor/cusensor2 projects (~70 stations) are fetched.
 
 ---
 
@@ -2271,7 +2361,7 @@ curl -X POST 'https://brgzimwzcfbwkgymqzvy.supabase.co/functions/v1/fetch-thai-a
 - `user_id` references `auth.users(id) ON DELETE CASCADE`
 - `UNIQUE (user_id, device_id)`  --  one user can register a device once; max 3 users per device (enforced in `register_device()` function)
 
-**Round 2 (v1.6) Additions:** 8 new columns สำหรับ BEFF location card (Prototype V6 design). ทุก column nullable — backward compatible กับ devices ที่มีอยู่.
+**Round 2 (v1.6) Additions:** 8 new columns for the BEFF location card (Prototype V6 design). Every column is nullable — backward compatible with existing devices.
 
 ---
 
@@ -2348,23 +2438,26 @@ curl -X POST 'https://brgzimwzcfbwkgymqzvy.supabase.co/functions/v1/fetch-thai-a
 
 | Column              | Type        | Nullable | Default | Description                          |
 |---------------------|-------------|----------|---------|--------------------------------------|
-| `uid`               | TEXT (PK)   | No       |  --     | AQICN station unique ID              |
+| `id`                | BIGINT      | No       | identity | Surrogate key (auto-increment)      |
+| `uid`               | INTEGER     | No       |  --     | AQICN station ID (may be negative for unofficial stations) |
 | `station_name`      | TEXT        | Yes      |  --     | Station display name                 |
 | `latitude`          | REAL        | Yes      |  --     | GPS latitude                         |
 | `longitude`         | REAL        | Yes      |  --     | GPS longitude                        |
 | `aqi`               | INTEGER     | Yes      |  --     | AQI index (US EPA)                   |
-| `dominant_pollutant`| TEXT        | Yes      |  --     | Primary pollutant                    |
 | `measured_at`       | TIMESTAMPTZ | Yes      |  --     | When station last reported           |
-| `fetched_at`        | TIMESTAMPTZ | No       | NOW()   | When our system fetched the data     |
-| `raw_json`          | JSONB       | Yes      |  --     | Raw AQICN API response               |
+| `fetched_at`        | TIMESTAMPTZ | Yes      | NOW()   | When our system fetched the data     |
+| `created_at`        | TIMESTAMPTZ | Yes      | NOW()   | Row creation time                    |
 
-**Indexes:**
-- Primary key: `uid`
-- `idx_aqicn_stations_aqi` on `(aqi)` — filter NULL AQI
-- `idx_aqicn_stations_geo` on `(latitude, longitude)` — geo queries
-- `idx_aqicn_stations_measured` on `(measured_at)` — freshness check
+> ⚠ **Corrected in v1.7:** Earlier documents (≤v1.6) listed `dominant_pollutant`, `raw_json`, and `uid TEXT (PK)`, which **do not match the live table** — the real table has neither of those two columns, the PK is `id` (BIGINT), and `uid` is `INTEGER` (can be negative). Verified via `information_schema.columns` on 03 Jun 2026.
 
-> **Note:** Data is UPSERT every hour by `fetch-aqicn-map` Edge Function (pg_cron job #7). No historical data retained — always shows latest snapshot. ~470 rows total.
+**Indexes & Constraints:**
+- `aqicn_stations_pkey` — PRIMARY KEY, UNIQUE btree (`id`)
+- `aqicn_stations_uid_key` — UNIQUE btree (`uid`)
+- `idx_aqicn_stations_aqi` — btree (`aqi`), **partial: `WHERE aqi IS NOT NULL`** — used to filter out stations with no AQI
+- `idx_aqicn_stations_lat_lng` — btree (`latitude`, `longitude`) — geo queries
+- `idx_aqicn_stations_fetched` — btree (`fetched_at DESC`) — recency / freshness ordering
+
+> **Note:** Data is UPSERT every hour by `fetch-aqicn-map` Edge Function (pg_cron job #7). No historical data retained — always shows latest snapshot. ~1,026 rows total.
 
 ### Table: thai_air_stations
 
@@ -2439,12 +2532,12 @@ WHERE s.is_active = true;
 
 ### Storage Bucket: device-photos ★ NEW v1.6
 
-Supabase Storage bucket สำหรับเก็บรูปของ BEFF locations (ใช้ใน Prototype V6 card).
+Supabase Storage bucket for storing BEFF location photos (used in the Prototype V6 card).
 
 | Property            | Value                                                 |
 |---------------------|-------------------------------------------------------|
 | **Bucket ID**       | `device-photos`                                       |
-| **Public Read**     | `true` (ใครก็ดูผ่าน URL ได้ — ไม่ต้อง login)            |
+| **Public Read**     | `true` (anyone can view via URL — no login required)  |
 | **File Size Limit** | 5 MB                                                  |
 | **Allowed MIME**    | `image/jpeg`, `image/jpg`, `image/png`, `image/webp`  |
 | **Path Convention** | `{user_id}/{device_id}/{filename}`                    |
@@ -2455,7 +2548,7 @@ Supabase Storage bucket สำหรับเก็บรูปของ BEFF lo
 https://brgzimwzcfbwkgymqzvy.supabase.co/storage/v1/object/public/device-photos/{path}
 ```
 
-ตัวอย่าง:
+Example:
 ```
 https://brgzimwzcfbwkgymqzvy.supabase.co/storage/v1/object/public/device-photos/aaaa-bbbb/tcdc.webp
 ```
@@ -2468,9 +2561,9 @@ https://brgzimwzcfbwkgymqzvy.supabase.co/storage/v1/object/public/device-photos/
 | `device_photos_auth_update`| UPDATE    | `authenticated` | Same as insert                                 |
 | `device_photos_auth_delete`| DELETE    | `authenticated` | Same as insert                                 |
 
-> **No SELECT policy:** Public buckets ใช้ CDN endpoint `/storage/v1/object/public/...` ที่ bypass RLS อยู่แล้ว — ไม่ต้องมี SELECT policy เพิ่ม.
+> **No SELECT policy:** Public buckets use the CDN endpoint `/storage/v1/object/public/...`, which already bypasses RLS — so no extra SELECT policy is needed.
 >
-> **Write constraint:** Authenticated user อัปโหลด/แก้/ลบได้เฉพาะใน folder ของตัวเอง (`{user_id}/...`) เท่านั้น. Admin role support จะเพิ่มใน Phase 4 (Admin Portal).
+> **Write constraint:** An authenticated user can only upload/update/delete within their own folder (`{user_id}/...`). Admin-role support will be added in Phase 4 (Admin Portal).
 
 #### Upload Example (JavaScript)
 
@@ -2493,12 +2586,12 @@ async function uploadDevicePhoto(file, deviceId) {
 
   if (error) throw error;
 
-  // ได้ public URL กลับมา
+  // Get the public URL back
   const { data: { publicUrl } } = supabase.storage
     .from('device-photos')
     .getPublicUrl(path);
 
-  return publicUrl;  // เก็บลง user_devices.photo_url
+  return publicUrl;  // store in user_devices.photo_url
 }
 ```
 
@@ -2558,12 +2651,11 @@ Row Level Security (RLS) is enabled on all database tables **and** on `storage.o
 
 > **Note:** The INSERT policies with `true` are intentional  - EMQX Cloud uses the Supabase service role key to insert sensor/status data, and the `get-outdoor-air` Edge Function uses the service role key to insert outdoor air cache data. These rows have no user context. The `SECURITY DEFINER` functions handle ownership checks independently.
 
-### aqicn_stations (2 Policies) ★ NEW
+### aqicn_stations (1 Policy) ★ NEW
 
 | Policy                              | Operation | Rule                                                   |
 |-------------------------------------|-----------|--------------------------------------------------------|
-| aqicn_stations_read_anon            | SELECT    | `true` (public data, readable by anon key)             |
-| aqicn_stations_read_authenticated   | SELECT    | `true` (public data, readable by authenticated users)  |
+| aqicn_stations_read_all             | SELECT    | `true` (public data, readable by anon and authenticated) |
 
 > **Note:** AQICN station data is fully public. Write access is restricted to service_role (used by `fetch-aqicn-map` via pg_cron). No Security/Performance Advisor warnings.
 
@@ -2591,9 +2683,9 @@ Row Level Security (RLS) is enabled on all database tables **and** on `storage.o
 | `device_photos_auth_update`  | UPDATE    | `authenticated` | Same as insert                                              |
 | `device_photos_auth_delete`  | DELETE    | `authenticated` | Same as insert                                              |
 
-> **No SELECT policy (intentional):** Public buckets ใน Supabase ใช้ CDN endpoint `/storage/v1/object/public/{bucket}/{path}` ที่ bypass RLS โดยธรรมชาติ — ไม่ต้องมี SELECT policy เพิ่ม. การมี broad SELECT policy จะเปิดให้ `list` operation ทำงาน (ดู filenames ทั้งหมดใน bucket) ซึ่งเป็น privacy leak.
+> **No SELECT policy (intentional):** Public buckets in Supabase use the CDN endpoint `/storage/v1/object/public/{bucket}/{path}`, which bypasses RLS by design — so no extra SELECT policy is needed. Adding a broad SELECT policy would enable the `list` operation (viewing all filenames in the bucket), which would be a privacy leak.
 >
-> **Write constraint:** Authenticated user อัปโหลด/แก้/ลบได้เฉพาะใน folder ของตัวเอง — path ต้องขึ้นต้นด้วย `{user_id}/...` เท่านั้น. Admin role override จะเพิ่มใน Phase 4B (Admin Portal).
+> **Write constraint:** An authenticated user can only upload/update/delete within their own folder — the path must start with `{user_id}/...`. An admin-role override will be added in Phase 4B (Admin Portal).
 
 ---
 
@@ -2678,12 +2770,12 @@ Row Level Security (RLS) is enabled on all database tables **and** on `storage.o
 
 | Constraint          | Value                  | Notes                                        |
 |---------------------|------------------------|----------------------------------------------|
-| Air4Thai            | 1 request/hour         | Returns all 186 stations in 1 call           |
-| CUSense             | 1 request/hour         | Returns all ~59 non-PCD stations in 1 call   |
+| Air4Thai            | 1 request/hour         | Returns all 189 stations in 1 call           |
+| CUSense             | 1 request/hour         | Returns all ~70 non-PCD stations in 1 call   |
 | Total API calls     | 2 per hour (pg_cron)   | Minimal load on source APIs                  |
 | fetch-thai-air      | ~2 seconds per run     | Batch UPSERT + batch INSERT (Round 3A)       |
 | Dedup               | (station_id, measured_at) | Prevents duplicate readings on re-run     |
-| Storage estimate    | ~100 MB at 90 days     | 245 stations x 24 hrs x 90 days = ~529K rows|
+| Storage estimate    | ~110 MB at 90 days     | 259 stations x 24 hrs x 90 days = ~559K rows|
 
 ---
 
@@ -2692,7 +2784,8 @@ Row Level Security (RLS) is enabled on all database tables **and** on `storage.o
 *This document is part of the BE-TPP Handoff Package for Phase 4 (Dashboard Development).*
 *For project status and architecture details, see `BE-TPP_Project_Status_v10.md`.*
 *For a live test console, visit: https://warunyususen.github.io/be-tpp-api-sample/*
-*Change from v1.4: Deprecated get-outdoor-air + get-outdoor-air-batch (Section 10.1-10.2), added aqicn_stations REST API (Section 10.3), added Migration Guide, added aqicn_stations DB schema + RLS policies, updated AQICN API Limits*
+*Change from v1.7 to v1.8: Full English translation. Corrected `aqicn_stations` index names (lat_lng, fetched), marked the aqi index partial, added pkey + uid UNIQUE constraints; reduced aqicn RLS to a single `aqicn_stations_read_all` policy; corrected aqicn row count (~470 → ~1,026); corrected Thai Air count (245 → 259 = Air4Thai 189 + CUSense 70); corrected `uid` to INTEGER in Section 10.3 examples. All verified against the live DB on 03 Jun 2026.*
+*Change from v1.6: Added `v_aqicn_stations_status` + `v_aqicn_stations_live` views (Section 10.4-10.5), corrected `aqicn_stations` DB schema to match live table (removed dominant_pollutant/raw_json, added id/created_at, uid INTEGER), updated PK note.*
 *Change from v1.3: Added Section 11 (Thai Air Quality — v_thai_air_latest, thai_air_readings, fetch-thai-air), thai_air_stations/readings DB schema, RLS policies, retention 90 days, Thai Air rate limits*
 *Change from v1.2: Added Section 10.2 (get-outdoor-air-batch), updated Section 7.2 (get_public_air_quality p_public_only parameter)*
 *Change from v1.5 to v1.6: Section 7.2 response extended with 8 BEFF location fields (location_name, photo_url, category, address, email, phone, website, google_place_id) — privacy-gated. Function marked STABLE. Applied via Round E migration on 19 April 2026.*
