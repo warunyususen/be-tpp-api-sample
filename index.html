@@ -2813,9 +2813,19 @@ async function testAqicnStations() {
                 };
             });
 
-            // Data freshness
-            if (data[0].fetched_at) {
-                var ageMin = Math.round((Date.now() - new Date(data[0].fetched_at).getTime()) / 60000);
+            // Data freshness (R-S2.1): วัดจาก fetched_at ที่ใหม่ที่สุดของทั้งชุด = cron health จริง
+            // ไม่ใช้ data[0] เพราะแถวแรกอาจเป็นสถานีตายที่ fetched_at แช่แข็ง ทำให้ค่าหลอกตา
+            // รองรับ snake_case (fetched_at) และ camelCase (fetchedAt)
+            var maxFetched = 0;
+            data.forEach(function(s) {
+                var f = s.fetched_at || s.fetchedAt;
+                if (f) {
+                    var t = new Date(f).getTime();
+                    if (t > maxFetched) maxFetched = t;
+                }
+            });
+            if (maxFetched > 0) {
+                var ageMin = Math.round((Date.now() - maxFetched) / 60000);
                 summary.data_age_minutes = ageMin;
                 summary.freshness = ageMin <= 90 ? 'FRESH (within cron interval)' : 'STALE (check cron job)';
             }
