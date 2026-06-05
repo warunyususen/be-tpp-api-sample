@@ -1,9 +1,18 @@
 # BE-TPP API Documentation
 
-**Version:** 1.8
-**Last Updated:** 03 June 2026
+**Version:** 1.9
+**Last Updated:** 05 June 2026
 **Project:** BE-TPP IoT (Breatheeasy Total Positive Pressure)
 **Language:** English (translated from v1.7)
+
+**Changelog v1.9 (05 June 2026):**
+- **[Section 11.2] Added `v_thai_air_latest_status` (View) ★ NEW — adds `station_status` (online/delayed/offline/unknown) + `data_age_hours`, computed from `measured_at` at query time. Built on top of `v_thai_air_latest` (Round C).**
+- **[Section 11.3] Added `v_thai_air_latest_live` (View) ★ NEW — returns only `online` stations (≤6h) for the customer app/map. Built on top of `v_thai_air_latest_status`.**
+- **[Sections 11.4 / 11.5] Renumbered `thai_air_readings` (was 11.2) and `fetch-thai-air` (was 11.3) to make room for the two new freshness views.**
+- **[Section 12] Added the `v_thai_air_latest_status` / `v_thai_air_latest_live` schema entry (21 columns, verified via information_schema on 05 Jun 2026).**
+- **[Verified, 05 Jun 2026] Freshness counts: total 259 = online 222 + delayed 1 + offline 36 (CUSense accounts for 22 of the offline). `v_thai_air_latest_live` returns ~222 rows.**
+
+100% backward compatible — the existing `v_thai_air_latest` view (Section 11.1) is untouched; the new views are additive (mirrors the aqicn pattern from v1.7).
 
 **Changelog v1.8 (03 June 2026):**
 - **Full English translation of the v1.7 document. All Thai notes and code comments are translated; Thai data values (e.g. station and province names) are kept as-is because they are stored in Thai in the database.**
@@ -65,8 +74,10 @@
     - 10.5 [v_aqicn_stations_live (View) ★ NEW v1.7](#105-v_aqicn_stations_live-view--rest-query)
 11. [API Functions  --  Thai Air Quality (Nationwide)](#11-api-functions--thai-air-quality-nationwide)
     - 11.1 [v_thai_air_latest (View — REST Query)](#111-v_thai_air_latest-view--rest-query)
-    - 11.2 [thai_air_readings (History — REST Query)](#112-thai_air_readings-history--rest-query)
-    - 11.3 [fetch-thai-air (Edge Function — Cron/Admin)](#113-fetch-thai-air-edge-function--cronadmin)
+    - 11.2 [v_thai_air_latest_status (View) ★ NEW v1.9](#112-v_thai_air_latest_status-view--rest-query)
+    - 11.3 [v_thai_air_latest_live (View) ★ NEW v1.9](#113-v_thai_air_latest_live-view--rest-query)
+    - 11.4 [thai_air_readings (History — REST Query)](#114-thai_air_readings-history--rest-query)
+    - 11.5 [fetch-thai-air (Edge Function — Cron/Admin)](#115-fetch-thai-air-edge-function--cronadmin)
 12. [Database Schema](#12-database-schema)
     - [Storage Bucket: device-photos ★ NEW v1.6](#storage-bucket-device-photos--new-v16)
 13. [RLS Policies Summary](#13-rls-policies-summary)
@@ -2202,7 +2213,104 @@ const { data, error } = await supabase
 
 ---
 
-### 11.2 thai_air_readings (History — REST Query)
+### 11.2 v_thai_air_latest_status (View — REST Query) ★ NEW v1.9
+
+A read-only view over `v_thai_air_latest` that adds a computed **`station_status`** (online/delayed/offline/unknown) and **`data_age_hours`**, derived from `measured_at` vs `now()` **at query time** (not stored, no cron). Returns the **full** station list (259) including stale stations — use for admin dashboards and data-quality monitoring. Mirrors the aqicn pattern (Section 10.4).
+
+> **Why this exists:** `v_thai_air_latest` (Section 11.1) returns every active station with its latest reading but does not flag freshness. Stations that stopped reporting (notably CUSense) still appear with an old `measured_at`. A consumer that does not check the timestamp could present stale data as current. This view exposes `station_status` so clients can filter or warn. It is less critical than the aqicn case because `measured_at` here is the true measurement time (detectable by the consumer), but it is provided for consistency with the aqicn views.
+
+#### Endpoint
+
+```
+GET https://brgzimwzcfbwkgymqzvy.supabase.co/rest/v1/v_thai_air_latest_status?select=*
+```
+
+#### Headers
+
+```
+apikey: <SUPABASE_ANON_KEY>
+```
+
+#### Request Example (JavaScript)
+
+```javascript
+// All stations + status (259 rows)
+const { data, error } = await sb
+  .from('v_thai_air_latest_status')
+  .select('*');
+
+// Only offline stations (stale > 12h)
+const { data, error } = await sb
+  .from('v_thai_air_latest_status')
+  .select('*')
+  .eq('station_status', 'offline')
+  .order('data_age_hours', { ascending: false });
+```
+
+#### Status Thresholds
+
+| `station_status` | Condition (based on `measured_at`) |
+|------------------|------------------------------------|
+| `online`         | ≤ 6 hours                          |
+| `delayed`        | > 6 and ≤ 12 hours                 |
+| `offline`        | > 12 hours                         |
+| `unknown`        | `measured_at` IS NULL              |
+
+#### Response Fields (in addition to all `v_thai_air_latest` columns — Section 11.1)
+
+| Field             | Type    | Description                                      |
+|-------------------|---------|--------------------------------------------------|
+| `station_status`  | TEXT    | `online` / `delayed` / `offline` / `unknown`     |
+| `data_age_hours`  | NUMERIC | Hours since `measured_at` (1 decimal place)      |
+
+> The view returns the same 21-column schema as `v_thai_air_latest_live` (Section 11.3): the 19 columns inherited from `v_thai_air_latest` plus these 2. Note there is **no `tambol`** column (the base view does not select it).
+
+**Verified counts (05 Jun 2026):** total **259** = online **222** + delayed **1** + offline **36**. Sources: Air4Thai 189 + CUSense 70. CUSense accounts for 22 of the 36 offline stations.
+
+**Security:** `security_invoker = true` (respects the RLS of the underlying tables). `GRANT SELECT TO anon, authenticated`.
+
+---
+
+### 11.3 v_thai_air_latest_live (View — REST Query) ★ NEW v1.9
+
+Convenience view returning **only `online` stations (≤6h)** — the same 21 columns as Section 11.2 but pre-filtered (`WHERE station_status = 'online'`). Built **on top of** `v_thai_air_latest_status`, so the freshness thresholds live in a single place.
+
+**Use this as the default source for customer-facing maps/lists** so stale stations never appear. Returns **~222 rows**.
+
+#### Endpoint
+
+```
+GET https://brgzimwzcfbwkgymqzvy.supabase.co/rest/v1/v_thai_air_latest_live?select=*
+```
+
+#### Request Example (JavaScript)
+
+```javascript
+// Live stations only (~222 rows, all online ≤6h)
+const { data, error } = await sb
+  .from('v_thai_air_latest_live')
+  .select('*');
+
+// Live stations in a province
+const { data, error } = await sb
+  .from('v_thai_air_latest_live')
+  .select('*')
+  .eq('province', 'อุดรธานี');
+```
+
+#### View Selection Guide
+
+| Use case                          | Recommended source            |
+|-----------------------------------|-------------------------------|
+| Customer app / map (current AQ)   | `v_thai_air_latest_live`      |
+| Admin / debug / data quality      | `v_thai_air_latest_status`    |
+| Full list (no status, legacy)     | `v_thai_air_latest` (Section 11.1) |
+
+**Security:** `security_invoker = true`. `GRANT SELECT TO anon, authenticated`.
+
+---
+
+### 11.4 thai_air_readings (History — REST Query)
 
 Retrieves hourly historical data for a single station (for charting purposes).
 
@@ -2254,7 +2362,7 @@ const { data, error } = await supabase
 
 ---
 
-### 11.3 fetch-thai-air (Edge Function — Cron/Admin)
+### 11.5 fetch-thai-air (Edge Function — Cron/Admin)
 
 Edge Function for fetching data from Air4Thai + CUSense and syncing to the database. Runs via pg_cron every hour (at minute 5). Not designed to be called directly by the frontend.
 
@@ -2530,6 +2638,63 @@ WHERE s.is_active = true;
 
 ---
 
+### View: v_thai_air_latest_status / v_thai_air_latest_live ★ NEW v1.9
+
+Freshness views built on top of `v_thai_air_latest` (Round C). `_status` adds `station_status` + `data_age_hours`; `_live` filters `_status` to online-only. Both expose the **same 21 columns** (verified via information_schema, 05 Jun 2026): the 19 columns of `v_thai_air_latest` plus the 2 new ones. There is no `tambol` column (the base view does not select it).
+
+```sql
+-- v_thai_air_latest_status: base view + 2 computed columns
+CREATE VIEW public.v_thai_air_latest_status
+WITH (security_invoker = true) AS
+SELECT
+  base.*,
+  CASE
+    WHEN base.measured_at IS NULL                        THEN 'unknown'
+    WHEN base.measured_at >= now() - interval '6 hours'  THEN 'online'
+    WHEN base.measured_at >= now() - interval '12 hours' THEN 'delayed'
+    ELSE 'offline'
+  END AS station_status,
+  CASE
+    WHEN base.measured_at IS NULL THEN NULL
+    ELSE round((EXTRACT(EPOCH FROM (now() - base.measured_at)) / 3600.0)::numeric, 1)
+  END AS data_age_hours
+FROM public.v_thai_air_latest base;
+
+-- v_thai_air_latest_live: online subset
+CREATE VIEW public.v_thai_air_latest_live
+WITH (security_invoker = true) AS
+SELECT * FROM public.v_thai_air_latest_status
+WHERE station_status = 'online';
+```
+
+| Column            | Type                     | Notes                                  |
+|-------------------|--------------------------|----------------------------------------|
+| station_id        | bigint                   | inherited from v_thai_air_latest       |
+| source            | text                     | air4thai / cusense                     |
+| source_station_id | text                     |                                        |
+| name              | text                     | Thai                                   |
+| name_en           | text                     | English (Air4Thai only)                |
+| latitude          | double precision         |                                        |
+| longitude         | double precision         |                                        |
+| province          | text                     |                                        |
+| amphoe            | text                     |                                        |
+| station_type      | text                     |                                        |
+| pm25              | real                     |                                        |
+| pm10              | real                     |                                        |
+| pm1               | real                     |                                        |
+| aqi               | integer                  |                                        |
+| temperature       | real                     |                                        |
+| humidity          | real                     |                                        |
+| measured_at       | timestamptz              | basis for status calculation           |
+| fetched_at        | timestamptz              |                                        |
+| aqi_level         | text                     |                                        |
+| **station_status**| **text** ★ NEW v1.9      | online / delayed / offline / unknown   |
+| **data_age_hours**| **numeric** ★ NEW v1.9   | hours since measured_at (1 decimal)    |
+
+> **Note:** `security_invoker = true` — both views respect the caller's RLS. `GRANT SELECT TO anon, authenticated`.
+
+---
+
 ### Storage Bucket: device-photos ★ NEW v1.6
 
 Supabase Storage bucket for storing BEFF location photos (used in the Prototype V6 card).
@@ -2784,6 +2949,7 @@ Row Level Security (RLS) is enabled on all database tables **and** on `storage.o
 *This document is part of the BE-TPP Handoff Package for Phase 4 (Dashboard Development).*
 *For project status and architecture details, see `BE-TPP_Project_Status_v10.md`.*
 *For a live test console, visit: https://warunyususen.github.io/be-tpp-api-sample/*
+*Change from v1.8 to v1.9: Added `v_thai_air_latest_status` + `v_thai_air_latest_live` freshness views (Sections 11.2-11.3, built on top of `v_thai_air_latest`); renumbered `thai_air_readings`/`fetch-thai-air` to 11.4/11.5; added the new views to the DB schema (Section 12, 21 columns). Verified counts on 05 Jun 2026: 259 total = 222 online + 1 delayed + 36 offline. 100% backward compatible (Round C, mirrors the aqicn v1.7 pattern).*
 *Change from v1.7 to v1.8: Full English translation. Corrected `aqicn_stations` index names (lat_lng, fetched), marked the aqi index partial, added pkey + uid UNIQUE constraints; reduced aqicn RLS to a single `aqicn_stations_read_all` policy; corrected aqicn row count (~470 → ~1,026); corrected Thai Air count (245 → 259 = Air4Thai 189 + CUSense 70); corrected `uid` to INTEGER in Section 10.3 examples. All verified against the live DB on 03 Jun 2026.*
 *Change from v1.6: Added `v_aqicn_stations_status` + `v_aqicn_stations_live` views (Section 10.4-10.5), corrected `aqicn_stations` DB schema to match live table (removed dominant_pollutant/raw_json, added id/created_at, uid INTEGER), updated PK note.*
 *Change from v1.3: Added Section 11 (Thai Air Quality — v_thai_air_latest, thai_air_readings, fetch-thai-air), thai_air_stations/readings DB schema, RLS policies, retention 90 days, Thai Air rate limits*
