@@ -1235,7 +1235,7 @@
         <div class="dm-section">
             <div class="dm-section-title">
                 <span class="section-tag tag-thai-air">&#127758; Thai Air Quality (Nationwide)</span>
-                <span style="font-size:12px; color:var(--text-dim); font-weight:400;">245 stations — No Login Required</span>
+                <span style="font-size:12px; color:var(--text-dim); font-weight:400;">259 stations — No Login Required</span>
             </div>
 
             <!-- Card 11: Thai Air Latest (v_thai_air_latest) -->
@@ -1250,11 +1250,11 @@
                     </button>
                 </div>
                 <div class="api-card-body">
-                    <p>Fetch latest data from 245 stations across Thailand (Air4Thai + CUSense) with aqi_level</p>
+                    <p>Fetch latest data from 259 stations across Thailand (Air4Thai + CUSense) with aqi_level</p>
                     <div class="param-row">
                         <span class="param-label">filter</span>
                         <select class="param-input" id="thaiAirFilter" onchange="onThaiAirFilterChange()">
-                            <option value="all" selected>All stations (245)</option>
+                            <option value="all" selected>All stations (259)</option>
                             <option value="province">By province</option>
                             <option value="unhealthy">PM2.5 > 37.5 (unhealthy+)</option>
                         </select>
@@ -1264,6 +1264,33 @@
                         <input type="text" class="param-input" id="thaiAirProvince" placeholder="e.g. Udon Thani, Bangkok" />
                     </div>
                     <div id="outputThaiAirLatest"></div>
+                </div>
+            </div>
+
+            <!-- Card 11b: Thai Air Live/Status (v_thai_air_latest_live / _status) — Round C -->
+            <div class="api-card" style="margin-bottom:16px;">
+                <div class="api-card-header">
+                    <h3>
+                        <span class="method-badge method-rpc">REST</span>
+                        v_thai_air_latest_live
+                    </h3>
+                    <button class="btn btn-primary btn-sm" onclick="testThaiAirLive()" id="btnThaiAirLive">
+                        &#9654; Run
+                    </button>
+                </div>
+                <div class="api-card-body">
+                    <p>Freshness views (Round C). <code>v_thai_air_latest_live</code> = online only (&le;6h); <code>v_thai_air_latest_status</code> = all + <code>station_status</code> + <code>data_age_hours</code> (computed from <code>measured_at</code>).</p>
+                    <div class="param-row">
+                        <span class="param-label">filter</span>
+                        <select class="param-input" id="thaiAirLiveFilter">
+                            <option value="live" selected>&#128994; Live only (&le;6h) — expect ~222</option>
+                            <option value="status_all">All + status breakdown (259)</option>
+                            <option value="online">&#128994; Online (&le;6h)</option>
+                            <option value="delayed">&#128993; Delayed (6-12h)</option>
+                            <option value="offline">&#128308; Offline (&gt;12h)</option>
+                        </select>
+                    </div>
+                    <div id="outputThaiAirLive"></div>
                 </div>
             </div>
 
@@ -1305,7 +1332,7 @@
         <div class="dm-section">
             <div class="dm-section-title">
                 <span class="section-tag tag-aqicn">&#127760; AQICN Stations (Worldwide)</span>
-                <span style="font-size:12px; color:var(--text-dim); font-weight:400;">~470 stations via cron — No Login Required</span>
+                <span style="font-size:12px; color:var(--text-dim); font-weight:400;">~1,026 stations via cron — No Login Required</span>
             </div>
 
             <!-- Card 13: aqicn_stations REST API -->
@@ -2658,6 +2685,94 @@ async function testThaiAirLatest() {
     } catch (err) {
         var elapsed = Math.round(performance.now() - start);
         createOutput('outputThaiAirLatest', 'err', 'Network Error', formatTime(elapsed), err.message);
+    }
+}
+
+// ============================================================
+// Thai Air Quality: Test v_thai_air_latest_live / _status (Round C)
+// live → v_thai_air_latest_live (online เท่านั้น)
+// อื่นๆ → v_thai_air_latest_status (มี station_status / data_age_hours)
+// รองรับ JSON ทั้ง snake_case และ camelCase
+// ============================================================
+async function testThaiAirLive() {
+    showLoading('outputThaiAirLive');
+    var start = performance.now();
+    var filter = document.getElementById('thaiAirLiveFilter').value;
+
+    try {
+        // live ใช้ view ที่กรอง online มาแล้ว, นอกนั้นใช้ _status (มีคอลัมน์สถานะ)
+        var view = (filter === 'live') ? 'v_thai_air_latest_live' : 'v_thai_air_latest_status';
+        var query = sb.from(view).select('*');
+
+        // กรองตามสถานะ (เฉพาะ _status; _live กรอง online ให้แล้ว)
+        if (filter === 'online' || filter === 'delayed' || filter === 'offline') {
+            query = query.eq('station_status', filter);
+        }
+
+        var { data, error } = await query;
+        var elapsed = Math.round(performance.now() - start);
+
+        if (error) {
+            createOutput('outputThaiAirLive', 'err', 'Error: ' + error.code, formatTime(elapsed), error.message);
+            return;
+        }
+
+        // Build summary
+        var summary = {
+            view: view,
+            total_stations: data.length,
+            filter: filter,
+        };
+
+        if (data.length > 0) {
+            // นับตาม source
+            var air4thai = data.filter(function(s) { return s.source === 'air4thai'; }).length;
+            var cusense = data.filter(function(s) { return s.source === 'cusense'; }).length;
+            summary.sources = { air4thai: air4thai, cusense: cusense };
+
+            // สรุปสถานะ online/delayed/offline/unknown (snake/camelCase)
+            var statusCount = { online: 0, delayed: 0, offline: 0, unknown: 0 };
+            data.forEach(function(s) {
+                var st = s.station_status || s.stationStatus || 'unknown';
+                if (statusCount[st] === undefined) statusCount[st] = 0;
+                statusCount[st]++;
+            });
+            summary.status_breakdown = statusCount;
+
+            // ช่วง data_age_hours min/max (snake/camelCase)
+            var ages = data.map(function(s) {
+                return (s.data_age_hours != null) ? s.data_age_hours
+                     : (s.dataAgeHours != null) ? s.dataAgeHours : null;
+            }).filter(function(a) { return a != null; });
+            if (ages.length > 0) {
+                summary.data_age_hours = {
+                    min: Math.min.apply(null, ages),
+                    max: Math.max.apply(null, ages),
+                };
+            }
+
+            // ตัวอย่างสถานีเก่าสุด 5 อันดับ (ไว้ตรวจ offline)
+            var sorted = data.slice().sort(function(a, b) {
+                var aa = (a.data_age_hours != null) ? a.data_age_hours : (a.dataAgeHours != null ? a.dataAgeHours : -1);
+                var bb = (b.data_age_hours != null) ? b.data_age_hours : (b.dataAgeHours != null ? b.dataAgeHours : -1);
+                return bb - aa;
+            });
+            summary.oldest5 = sorted.slice(0, 5).map(function(s) {
+                return {
+                    name: s.name,
+                    source: s.source,
+                    station_status: s.station_status || s.stationStatus || null,
+                    data_age_hours: (s.data_age_hours != null) ? s.data_age_hours
+                                  : (s.dataAgeHours != null) ? s.dataAgeHours : null,
+                };
+            });
+        }
+
+        var statusText = '200 OK \u2014 ' + data.length + ' stations';
+        createOutput('outputThaiAirLive', 'ok', statusText, formatTime(elapsed), summary);
+    } catch (err) {
+        var elapsed = Math.round(performance.now() - start);
+        createOutput('outputThaiAirLive', 'err', 'Network Error', formatTime(elapsed), err.message);
     }
 }
 
